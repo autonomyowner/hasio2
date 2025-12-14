@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "Hasio",
+    "slug": "hasio",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "hasio",
+    "userInterfaceStyle": "automatic",
+    "sdkVersion": "54.0.0",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#FAF7F2"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.rork.hasio",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Hasio needs access to your microphone to enable voice conversations with the travel assistant."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0D7A5F"
+      },
+      "package": "app.rork.hasio",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-image-picker",
+      "expo-dev-client",
+      "@livekit/react-native-webrtc",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Hasio needs access to your microphone to enable voice conversations with the travel assistant."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "34cfb3cc-dfba-461d-87eb-2f1fb07f173e"
+      }
+    }
+  }
+}
