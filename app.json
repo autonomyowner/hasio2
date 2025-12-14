@@ -35,9 +35,6 @@
       "expo-router",
       "expo-font",
       "expo-image-picker",
-      "expo-dev-client",
-      "@livekit/react-native-expo-plugin",
-      "@config-plugins/react-native-webrtc",
       [
         "expo-av",
         {

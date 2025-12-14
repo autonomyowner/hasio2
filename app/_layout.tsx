@@ -13,14 +13,9 @@ import {
   PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
 } from "@expo-google-fonts/plus-jakarta-sans";
-import { ElevenLabsProvider } from "@elevenlabs/react-native";
-import { registerGlobals } from "@livekit/react-native";
 import "react-native-reanimated";
 
 import "../global.css";
-
-// Initialize LiveKit WebRTC globals
-registerGlobals();
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -46,7 +41,7 @@ export default function RootLayout() {
   }
 
   return (
-    <ElevenLabsProvider>
+    <>
       <Stack
         screenOptions={{
           headerShown: false,
@@ -59,6 +54,6 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
       </Stack>
       <StatusBar style="dark" />
-    </ElevenLabsProvider>
+    </>
   );
 }
