@@ -14,9 +14,13 @@ import {
   PlusJakartaSans_700Bold,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import { ElevenLabsProvider } from "@elevenlabs/react-native";
+import { registerGlobals } from "@livekit/react-native";
 import "react-native-reanimated";
 
 import "../global.css";
+
+// Initialize LiveKit WebRTC globals
+registerGlobals();
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
