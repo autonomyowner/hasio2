@@ -36,7 +36,6 @@
       "expo-font",
       "expo-image-picker",
       "expo-dev-client",
-      "@livekit/react-native-webrtc",
       [
         "expo-av",
         {
