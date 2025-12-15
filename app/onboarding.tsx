@@ -99,17 +99,10 @@ export default function OnboardingScreen() {
             style={styles.authSection}
           >
             <Button
-              title={t("continueWithGoogle")}
+              title={t("continueWithEmail")}
               variant="secondary"
               fullWidth
-              onPress={handleContinue}
-              style={styles.authButton}
-            />
-            <Button
-              title={t("continueWithApple")}
-              variant="secondary"
-              fullWidth
-              onPress={handleContinue}
+              onPress={() => router.push("/auth")}
               style={styles.authButton}
             />
             <Pressable onPress={handleSkip} style={styles.skipButton}>

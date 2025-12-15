@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   Pressable,
   Modal,
   TextInput,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
@@ -17,10 +19,11 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { useLanguage } from "@/hooks/useLanguage";
-import { useAppStore } from "@/stores/appStore";
+import { useAuthStore } from "@/stores/authStore";
+import { useMomentsStore } from "@/stores/momentsStore";
 import { MomentCard } from "@/components/moments/MomentCard";
 import { Button } from "@/components/ui";
-import type { Moment } from "@/types";
+import { AuthPrompt } from "@/components/auth";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -28,13 +31,21 @@ export function MomentsScreenContent() {
   const insets = useSafeAreaInsets();
   const { t, isRTL } = useLanguage();
 
-  const moments = useAppStore((state) => state.moments);
-  const addMoment = useAppStore((state) => state.addMoment);
+  const { user } = useAuthStore();
+  const { moments, isLoading, fetchMoments, addMoment, deleteMoment } = useMomentsStore();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [newMomentImage, setNewMomentImage] = useState<string | null>(null);
   const [newMomentNote, setNewMomentNote] = useState("");
   const [newMomentLocation, setNewMomentLocation] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch moments when user changes
+  useEffect(() => {
+    if (user) {
+      fetchMoments();
+    }
+  }, [user]);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -49,32 +60,69 @@ export function MomentsScreenContent() {
     }
   };
 
-  const handleAddMoment = () => {
+  const handleAddMoment = async () => {
     if (!newMomentImage) return;
 
-    const moment: Moment = {
-      id: Date.now().toString(),
-      image: newMomentImage,
-      note: newMomentNote,
-      location: newMomentLocation || undefined,
-      timestamp: new Date().toISOString(),
-    };
+    setIsSaving(true);
 
-    addMoment(moment);
-    setModalVisible(false);
-    setNewMomentImage(null);
-    setNewMomentNote("");
-    setNewMomentLocation("");
+    const success = await addMoment(
+      newMomentImage,
+      newMomentNote || undefined,
+      newMomentLocation || undefined
+    );
+
+    setIsSaving(false);
+
+    if (success) {
+      setModalVisible(false);
+      setNewMomentImage(null);
+      setNewMomentNote("");
+      setNewMomentLocation("");
+    } else {
+      Alert.alert(t("error"), t("momentSaveError"));
+    }
   };
 
-  const renderItem = ({ item, index }: { item: Moment; index: number }) => (
+  const handleDeleteMoment = async (id: string, imageUrl: string) => {
+    Alert.alert(
+      t("delete"),
+      t("deleteMomentConfirm"),
+      [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("delete"),
+          style: "destructive",
+          onPress: async () => {
+            await deleteMoment(id, imageUrl);
+          },
+        },
+      ]
+    );
+  };
+
+  const renderItem = ({ item, index }: { item: any; index: number }) => (
     <Animated.View
       entering={FadeInDown.delay(index * 100).duration(600)}
       style={styles.cardWrapper}
     >
-      <MomentCard moment={item} isRTL={isRTL} />
+      <MomentCard
+        moment={{
+          id: item.id,
+          image: item.image_url,
+          note: item.note || "",
+          location: item.location || undefined,
+          timestamp: item.created_at,
+        }}
+        isRTL={isRTL}
+        onDelete={() => handleDeleteMoment(item.id, item.image_url)}
+      />
     </Animated.View>
   );
+
+  // Show auth prompt if not logged in
+  if (!user) {
+    return <AuthPrompt />;
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -89,8 +137,12 @@ export function MomentsScreenContent() {
         <AddButton label={t("addMoment")} onPress={() => setModalVisible(true)} />
       </Animated.View>
 
-      {/* Moments Grid */}
-      {moments.length > 0 ? (
+      {/* Loading State */}
+      {isLoading && moments.length === 0 ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color="#0D7A5F" />
+        </View>
+      ) : moments.length > 0 ? (
         <FlatList
           data={moments}
           keyExtractor={(item) => item.id}
@@ -99,6 +151,8 @@ export function MomentsScreenContent() {
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          onRefresh={fetchMoments}
+          refreshing={isLoading}
         />
       ) : (
         <View style={styles.emptyState}>
@@ -129,12 +183,12 @@ export function MomentsScreenContent() {
               <Text style={[styles.modalTitle, isRTL && styles.textRTL]}>
                 {t("addMoment")}
               </Text>
-              <Pressable onPress={() => setModalVisible(false)}>
+              <Pressable onPress={() => setModalVisible(false)} disabled={isSaving}>
                 <Text style={styles.cancelText}>{t("cancel")}</Text>
               </Pressable>
             </View>
 
-            <Pressable style={styles.imagePicker} onPress={pickImage}>
+            <Pressable style={styles.imagePicker} onPress={pickImage} disabled={isSaving}>
               {newMomentImage ? (
                 <Animated.Image
                   source={{ uri: newMomentImage }}
@@ -154,6 +208,7 @@ export function MomentsScreenContent() {
               multiline
               numberOfLines={3}
               textAlign={isRTL ? "right" : "left"}
+              editable={!isSaving}
             />
 
             <TextInput
@@ -163,13 +218,14 @@ export function MomentsScreenContent() {
               value={newMomentLocation}
               onChangeText={setNewMomentLocation}
               textAlign={isRTL ? "right" : "left"}
+              editable={!isSaving}
             />
 
             <Button
-              title={t("save")}
+              title={isSaving ? t("saving") : t("save")}
               onPress={handleAddMoment}
               fullWidth
-              disabled={!newMomentImage}
+              disabled={!newMomentImage || isSaving}
             />
           </View>
         </View>
@@ -255,6 +311,11 @@ const styles = StyleSheet.create({
   },
   cardWrapper: {
     marginBottom: 0,
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyState: {
     flex: 1,

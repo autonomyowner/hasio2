@@ -14,6 +14,7 @@ import {
   PlusJakartaSans_700Bold,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import "react-native-reanimated";
+import { initAuthListener } from "@/stores/authStore";
 
 import "../global.css";
 
@@ -29,6 +30,11 @@ export default function RootLayout() {
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
   });
+
+  useEffect(() => {
+    // Initialize auth listener once (non-blocking)
+    initAuthListener();
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -51,6 +57,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="onboarding" />
+        <Stack.Screen name="auth" />
         <Stack.Screen name="(tabs)" />
       </Stack>
       <StatusBar style="dark" />

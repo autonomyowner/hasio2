@@ -16,9 +16,10 @@ interface MomentCardProps {
   moment: Moment;
   isRTL: boolean;
   onPress?: () => void;
+  onDelete?: () => void;
 }
 
-export function MomentCard({ moment, isRTL, onPress }: MomentCardProps) {
+export function MomentCard({ moment, isRTL, onPress, onDelete }: MomentCardProps) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -59,6 +60,13 @@ export function MomentCard({ moment, isRTL, onPress }: MomentCardProps) {
       <View style={styles.dateOverlay}>
         <Text style={styles.dateText}>{formatDate(moment.timestamp)}</Text>
       </View>
+
+      {/* Delete Button */}
+      {onDelete && (
+        <Pressable style={styles.deleteButton} onPress={onDelete}>
+          <Text style={styles.deleteButtonText}>×</Text>
+        </Pressable>
+      )}
 
       {/* Note */}
       {moment.note && (
@@ -117,6 +125,23 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "600",
+  },
+  deleteButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "rgba(220, 38, 38, 0.9)",
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "600",
+    lineHeight: 20,
   },
   noteContainer: {
     padding: 12,

@@ -21,7 +21,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useLanguage, getLocalizedText } from "@/hooks/useLanguage";
 import { SearchBar, CategoryCard } from "@/components/ui";
-import { featuredDestinations } from "@/constants/mockData";
+import { featuredDestinations, mockLodging, mockFood, mockEvents } from "@/constants/mockData";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const { width } = Dimensions.get("window");
@@ -74,6 +74,49 @@ export function HomeScreenContent({ onNavigateToTab }: HomeScreenContentProps) {
 
   const featuredItems = featuredDestinations.filter((d) => d.featured);
   const moreDestinations = featuredDestinations.filter((d) => !d.featured);
+
+  // Search functionality
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return null;
+
+    const query = searchQuery.toLowerCase();
+
+    const lodgingResults = mockLodging.filter((item) =>
+      item.name.toLowerCase().includes(query) ||
+      item.nameAr.includes(query) ||
+      item.city.toLowerCase().includes(query) ||
+      item.cityAr.includes(query)
+    );
+
+    const foodResults = mockFood.filter((item) =>
+      item.name.toLowerCase().includes(query) ||
+      item.nameAr.includes(query) ||
+      item.cuisine.toLowerCase().includes(query) ||
+      item.cuisineAr.includes(query)
+    );
+
+    const eventResults = mockEvents.filter((item) =>
+      item.title.toLowerCase().includes(query) ||
+      item.titleAr.includes(query) ||
+      item.location.toLowerCase().includes(query) ||
+      item.locationAr.includes(query)
+    );
+
+    const destinationResults = featuredDestinations.filter((item) =>
+      item.name.toLowerCase().includes(query) ||
+      item.nameAr.includes(query) ||
+      item.subtitle.toLowerCase().includes(query) ||
+      item.subtitleAr.includes(query)
+    );
+
+    return {
+      lodging: lodgingResults,
+      food: foodResults,
+      events: eventResults,
+      destinations: destinationResults,
+      total: lodgingResults.length + foodResults.length + eventResults.length + destinationResults.length,
+    };
+  }, [searchQuery]);
 
   const handleScroll = (event: any) => {
     scrollY.value = event.nativeEvent.contentOffset.y;
@@ -139,7 +182,98 @@ export function HomeScreenContent({ onNavigateToTab }: HomeScreenContentProps) {
           />
         </Animated.View>
 
-        {/* Category Cards */}
+        {/* Search Results */}
+        {searchResults ? (
+          <View style={styles.searchResultsContainer}>
+            {searchResults.total === 0 ? (
+              <View style={styles.noResultsContainer}>
+                <Text style={[styles.noResultsText, isRTL && styles.textRTL]}>
+                  {t("noResults")}
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Text style={[styles.resultsCount, isRTL && styles.textRTL]}>
+                  {searchResults.total} {t("resultsFound")}
+                </Text>
+
+                {searchResults.lodging.length > 0 && (
+                  <View style={styles.resultSection}>
+                    <Text style={[styles.resultSectionTitle, isRTL && styles.textRTL]}>
+                      {t("lodging")} ({searchResults.lodging.length})
+                    </Text>
+                    {searchResults.lodging.map((item, index) => (
+                      <SearchResultItem
+                        key={item.id}
+                        name={getLocalizedText(item.name, item.nameAr, language)}
+                        subtitle={`${getLocalizedText(item.city, item.cityAr, language)} • ${item.priceRange}`}
+                        image={item.images[0]}
+                        isRTL={isRTL}
+                        index={index}
+                      />
+                    ))}
+                  </View>
+                )}
+
+                {searchResults.food.length > 0 && (
+                  <View style={styles.resultSection}>
+                    <Text style={[styles.resultSectionTitle, isRTL && styles.textRTL]}>
+                      {t("food")} ({searchResults.food.length})
+                    </Text>
+                    {searchResults.food.map((item, index) => (
+                      <SearchResultItem
+                        key={item.id}
+                        name={getLocalizedText(item.name, item.nameAr, language)}
+                        subtitle={getLocalizedText(item.cuisine, item.cuisineAr, language)}
+                        image={item.images[0]}
+                        isRTL={isRTL}
+                        index={index}
+                      />
+                    ))}
+                  </View>
+                )}
+
+                {searchResults.events.length > 0 && (
+                  <View style={styles.resultSection}>
+                    <Text style={[styles.resultSectionTitle, isRTL && styles.textRTL]}>
+                      {t("events")} ({searchResults.events.length})
+                    </Text>
+                    {searchResults.events.map((item, index) => (
+                      <SearchResultItem
+                        key={item.id}
+                        name={getLocalizedText(item.title, item.titleAr, language)}
+                        subtitle={`${getLocalizedText(item.location, item.locationAr, language)} • ${item.date}`}
+                        image={item.images[0]}
+                        isRTL={isRTL}
+                        index={index}
+                      />
+                    ))}
+                  </View>
+                )}
+
+                {searchResults.destinations.length > 0 && (
+                  <View style={styles.resultSection}>
+                    <Text style={[styles.resultSectionTitle, isRTL && styles.textRTL]}>
+                      Destinations ({searchResults.destinations.length})
+                    </Text>
+                    {searchResults.destinations.map((item, index) => (
+                      <SearchResultItem
+                        key={item.id}
+                        name={getLocalizedText(item.name, item.nameAr, language)}
+                        subtitle={getLocalizedText(item.subtitle, item.subtitleAr, language)}
+                        image={item.image}
+                        isRTL={isRTL}
+                        index={index}
+                      />
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        ) : (
+          <>
+            {/* Category Cards */}
         <Animated.View
           entering={FadeInDown.delay(300).duration(600)}
           style={styles.section}
@@ -235,8 +369,59 @@ export function HomeScreenContent({ onNavigateToTab }: HomeScreenContentProps) {
 
         {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
+          </>
+        )}
       </ScrollView>
     </View>
+  );
+}
+
+interface SearchResultItemProps {
+  name: string;
+  subtitle: string;
+  image: string;
+  isRTL: boolean;
+  index: number;
+}
+
+function SearchResultItem({ name, subtitle, image, isRTL, index }: SearchResultItemProps) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.98, { damping: 15, stiffness: 400 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 400 });
+  };
+
+  return (
+    <Animated.View entering={FadeInDown.delay(index * 50).duration(400)}>
+      <AnimatedPressable
+        style={[styles.searchResultItem, animatedStyle]}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        <Image
+          source={{ uri: image }}
+          style={styles.searchResultImage}
+          contentFit="cover"
+          transition={200}
+        />
+        <View style={[styles.searchResultContent, isRTL && styles.searchResultContentRTL]}>
+          <Text style={[styles.searchResultName, isRTL && styles.textRTL]} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text style={[styles.searchResultSubtitle, isRTL && styles.textRTL]} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </View>
+      </AnimatedPressable>
+    </Animated.View>
   );
 }
 
@@ -441,5 +626,67 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 24,
+  },
+  searchResultsContainer: {
+    paddingHorizontal: CONTAINER_PADDING,
+    paddingTop: 16,
+  },
+  resultsCount: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#0D7A5F",
+    marginBottom: 20,
+  },
+  noResultsContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  noResultsText: {
+    fontSize: 16,
+    color: "#737373",
+  },
+  resultSection: {
+    marginBottom: 24,
+  },
+  resultSectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2C2416",
+    marginBottom: 12,
+  },
+  searchResultItem: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginBottom: 10,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  searchResultImage: {
+    width: 80,
+    height: 80,
+  },
+  searchResultContent: {
+    flex: 1,
+    padding: 12,
+    justifyContent: "center",
+  },
+  searchResultContentRTL: {
+    alignItems: "flex-end",
+  },
+  searchResultName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 4,
+  },
+  searchResultSubtitle: {
+    fontSize: 13,
+    color: "#737373",
   },
 });
