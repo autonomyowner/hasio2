@@ -1,5 +1,5 @@
 import React, { useRef, useCallback } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
+import { View, Pressable, StyleSheet, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PagerView from "react-native-pager-view";
 import Animated, {
@@ -7,10 +7,8 @@ import Animated, {
   useSharedValue,
   withSpring,
   interpolateColor,
-  withTiming,
 } from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
-import { useLanguage } from "@/hooks/useLanguage";
 
 // Import screen content components
 import {
@@ -24,31 +22,33 @@ import {
 } from "@/components/screens";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-const AnimatedText = Animated.createAnimatedComponent(Text);
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 interface TabItem {
   key: string;
-  labelKey: "home" | "lodging" | "food" | "events" | "planner" | "moments" | "settings";
   icon: keyof typeof Feather.glyphMap;
 }
 
+// Reordered: 3 left, home center, 3 right
 const tabs: TabItem[] = [
-  { key: "home", labelKey: "home", icon: "home" },
-  { key: "lodging", labelKey: "lodging", icon: "map-pin" },
-  { key: "food", labelKey: "food", icon: "coffee" },
-  { key: "events", labelKey: "events", icon: "calendar" },
-  { key: "planner", labelKey: "planner", icon: "message-circle" },
-  { key: "moments", labelKey: "moments", icon: "camera" },
-  { key: "settings", labelKey: "settings", icon: "settings" },
+  { key: "lodging", icon: "map-pin" },
+  { key: "food", icon: "coffee" },
+  { key: "events", icon: "calendar" },
+  { key: "home", icon: "home" },
+  { key: "planner", icon: "message-circle" },
+  { key: "moments", icon: "camera" },
+  { key: "settings", icon: "settings" },
 ];
+
+// Elevation offsets for arch effect (index 3 = home is highest, negative = up)
+const elevationOffsets = [0, -4, -8, -14, -8, -4, 0];
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  const { t, isRTL } = useLanguage();
   const pagerRef = useRef<PagerView>(null);
-  const [currentPage, setCurrentPage] = React.useState(0);
-  const scrollViewRef = useRef<ScrollView>(null);
-  const scrollPosition = useSharedValue(0);
+  const [currentPage, setCurrentPage] = React.useState(3); // Start at home (center)
+  const scrollPosition = useSharedValue(3);
 
   const handlePageScroll = useCallback((e: any) => {
     const { position, offset } = e.nativeEvent;
@@ -64,23 +64,34 @@ export default function TabLayout() {
     pagerRef.current?.setPage(index);
   }, []);
 
-  const handleNavigateToTab = useCallback((index: number) => {
-    pagerRef.current?.setPage(index);
+  const handleNavigateToTab = useCallback((tabKey: string) => {
+    const index = tabs.findIndex(tab => tab.key === tabKey);
+    if (index !== -1) {
+      pagerRef.current?.setPage(index);
+    }
   }, []);
 
-  // Auto-scroll tab bar to keep active tab visible
-  React.useEffect(() => {
-    if (scrollViewRef.current) {
-      const tabWidth = 100;
-      const scrollPosition = Math.max(0, currentPage * tabWidth - 100);
-      scrollViewRef.current.scrollTo({ x: scrollPosition, animated: true });
-    }
-  }, [currentPage]);
+  // Map old tab indices to new for navigation
+  const handleNavigateToTabIndex = useCallback((oldIndex: number) => {
+    // Old order: home(0), lodging(1), food(2), events(3), planner(4), moments(5), settings(6)
+    // New order: lodging(0), food(1), events(2), home(3), planner(4), moments(5), settings(6)
+    const indexMap: Record<number, number> = {
+      0: 3, // home -> index 3
+      1: 0, // lodging -> index 0
+      2: 1, // food -> index 1
+      3: 2, // events -> index 2
+      4: 4, // planner -> index 4
+      5: 5, // moments -> index 5
+      6: 6, // settings -> index 6
+    };
+    const newIndex = indexMap[oldIndex] ?? oldIndex;
+    pagerRef.current?.setPage(newIndex);
+  }, []);
 
   const renderScreen = (key: string) => {
     switch (key) {
       case "home":
-        return <HomeScreenContent onNavigateToTab={handleNavigateToTab} />;
+        return <HomeScreenContent onNavigateToTab={handleNavigateToTabIndex} />;
       case "lodging":
         return <LodgingScreenContent />;
       case "food":
@@ -88,7 +99,7 @@ export default function TabLayout() {
       case "events":
         return <EventsScreenContent />;
       case "planner":
-        return <PlannerScreenContent onNavigateToTab={handleNavigateToTab} />;
+        return <PlannerScreenContent onNavigateToTab={handleNavigateToTabIndex} />;
       case "moments":
         return <MomentsScreenContent />;
       case "settings":
@@ -98,13 +109,15 @@ export default function TabLayout() {
     }
   };
 
+  const tabWidth = (SCREEN_WIDTH - 32) / 7;
+
   return (
     <View style={styles.container}>
       {/* Pager View for native swipeable content */}
       <PagerView
         ref={pagerRef}
         style={styles.pagerView}
-        initialPage={0}
+        initialPage={3}
         onPageScroll={handlePageScroll}
         onPageSelected={handlePageSelected}
         overdrag={true}
@@ -117,65 +130,92 @@ export default function TabLayout() {
         ))}
       </PagerView>
 
-      {/* Custom Tab Bar */}
-      <View style={[styles.tabBarContainer, { paddingBottom: insets.bottom }]}>
-        <ScrollView
-          ref={scrollViewRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabBarContent}
-        >
+      {/* Hierarchical Arch Tab Bar */}
+      <View style={[styles.tabBarContainer, { paddingBottom: insets.bottom + 4 }]}>
+        {/* Arch background curve */}
+        <View style={styles.archBackground} />
+
+        <View style={styles.tabBarContent}>
           {tabs.map((tab, index) => {
             const isActive = currentPage === index;
+            const isHome = tab.key === "home";
+            const elevation = elevationOffsets[index];
+
             return (
               <TabButton
                 key={tab.key}
-                label={t(tab.labelKey)}
                 icon={tab.icon}
                 isActive={isActive}
+                isHome={isHome}
                 scrollPosition={scrollPosition}
                 tabIndex={index}
+                elevation={elevation}
+                tabWidth={tabWidth}
                 onPress={() => handleTabPress(index)}
               />
             );
           })}
-        </ScrollView>
+        </View>
       </View>
     </View>
   );
 }
 
 interface TabButtonProps {
-  label: string;
   icon: keyof typeof Feather.glyphMap;
   isActive: boolean;
+  isHome: boolean;
   scrollPosition: Animated.SharedValue<number>;
   tabIndex: number;
+  elevation: number;
+  tabWidth: number;
   onPress: () => void;
 }
 
-function TabButton({ label, icon, isActive, scrollPosition, tabIndex, onPress }: TabButtonProps) {
+function TabButton({
+  icon,
+  isActive,
+  isHome,
+  scrollPosition,
+  tabIndex,
+  elevation,
+  tabWidth,
+  onPress
+}: TabButtonProps) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [
+      { scale: scale.value },
+      { translateY: elevation },
+    ],
   }));
 
-  // Animate text color and indicator based on scroll position
-  const textStyle = useAnimatedStyle(() => {
+  // Animate based on scroll position
+  const containerStyle = useAnimatedStyle(() => {
     'worklet';
     const distance = Math.abs(scrollPosition.value - tabIndex);
     const progress = Math.max(0, Math.min(1, 1 - distance));
 
-    const color = interpolateColor(
+    const backgroundColor = interpolateColor(
       progress,
       [0, 1],
-      ["#737373", "#0D7A5F"]
+      isHome ? ["rgba(13, 122, 95, 0.1)", "rgba(13, 122, 95, 0.25)"] : ["transparent", "rgba(13, 122, 95, 0.12)"]
     );
 
     return {
-      color,
-      fontWeight: progress > 0.5 ? "600" : "500",
+      backgroundColor,
+    };
+  });
+
+  const dotStyle = useAnimatedStyle(() => {
+    'worklet';
+    const distance = Math.abs(scrollPosition.value - tabIndex);
+    const progress = Math.max(0, Math.min(1, 1 - distance));
+
+    return {
+      opacity: progress,
+      transform: [{ scale: progress }],
     };
   });
 
@@ -189,19 +229,8 @@ function TabButton({ label, icon, isActive, scrollPosition, tabIndex, onPress }:
     };
   });
 
-  const indicatorStyle = useAnimatedStyle(() => {
-    'worklet';
-    const distance = Math.abs(scrollPosition.value - tabIndex);
-    const progress = Math.max(0, Math.min(1, 1 - distance));
-
-    return {
-      opacity: progress,
-      transform: [{ scaleX: progress }],
-    };
-  });
-
   const handlePressIn = () => {
-    scale.value = withSpring(0.95, { damping: 15, stiffness: 400 });
+    scale.value = withSpring(0.92, { damping: 15, stiffness: 400 });
   };
 
   const handlePressOut = () => {
@@ -210,25 +239,30 @@ function TabButton({ label, icon, isActive, scrollPosition, tabIndex, onPress }:
 
   return (
     <AnimatedPressable
-      style={[styles.tabButton, animatedStyle]}
+      style={[
+        styles.tabButton,
+        isHome && styles.homeTabButton,
+        { width: tabWidth },
+        animatedStyle,
+      ]}
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >
-      <View style={styles.tabContent}>
+      <Animated.View style={[
+        styles.tabButtonInner,
+        isHome && styles.homeTabButtonInner,
+        containerStyle,
+      ]}>
         <Animated.View style={iconOpacity}>
           <Feather
             name={icon}
-            size={14}
-            color={isActive ? "#0D7A5F" : "#A3A3A3"}
-            style={styles.tabIcon}
+            size={isHome ? 22 : 18}
+            color={isActive ? "#0D7A5F" : "#737373"}
           />
         </Animated.View>
-        <AnimatedText style={[styles.tabLabel, textStyle]}>
-          {label}
-        </AnimatedText>
-      </View>
-      <Animated.View style={[styles.activeIndicator, indicatorStyle]} />
+        <Animated.View style={[styles.activeDot, dotStyle]} />
+      </Animated.View>
     </AnimatedPressable>
   );
 }
@@ -253,44 +287,51 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 8,
+    paddingTop: 16,
+    position: "relative",
+  },
+  archBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 20,
+    backgroundColor: "#FFFFFF",
   },
   tabBarContent: {
     flexDirection: "row",
     paddingHorizontal: 16,
-    paddingTop: 8,
-    gap: 8,
+    alignItems: "flex-end",
+    justifyContent: "space-between",
   },
   tabButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
     alignItems: "center",
-    position: "relative",
+    justifyContent: "flex-end",
   },
-  tabContent: {
-    flexDirection: "row",
+  homeTabButton: {
+    zIndex: 10,
+  },
+  tabButtonInner: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 10,
     alignItems: "center",
-    gap: 6,
+    minHeight: 36,
+    justifyContent: "center",
   },
-  tabIcon: {
-    opacity: 0.9,
+  homeTabButtonInner: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    minHeight: 42,
+    borderWidth: 2,
+    borderColor: "rgba(13, 122, 95, 0.2)",
   },
-  tabLabel: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#737373",
-    letterSpacing: 0.2,
-  },
-  tabLabelActive: {
-    color: "#0D7A5F",
-    fontWeight: "600",
-  },
-  activeIndicator: {
-    position: "absolute",
-    bottom: 4,
-    left: "25%",
-    right: "25%",
+  activeDot: {
+    width: 3,
     height: 3,
+    borderRadius: 1.5,
     backgroundColor: "#0D7A5F",
-    borderRadius: 2,
+    marginTop: 3,
   },
 });
