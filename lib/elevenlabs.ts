@@ -4,6 +4,13 @@ export const ELEVENLABS_CONFIG = {
   agentId: "agent_9701kcffp034epb9apq1astrvjbh",
 };
 
+// AI Configuration - Keys loaded from env or config
+export const AI_CONFIG = {
+  provider: 'groq' as 'groq' | 'openai',
+  groqApiKey: process.env.EXPO_PUBLIC_GROQ_API_KEY || '',
+  openaiApiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY || '',
+};
+
 // Helper to get signed URL for conversation (if needed for secure connections)
 export async function getSignedUrl(): Promise<string> {
   // For client-side usage, we can connect directly with the agent ID

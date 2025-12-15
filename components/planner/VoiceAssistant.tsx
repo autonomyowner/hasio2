@@ -1,16 +1,25 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
   Modal,
+  ScrollView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withRepeat,
+  withTiming,
+  withSequence,
+  cancelAnimation,
 } from "react-native-reanimated";
+import { voiceService, VoiceState } from "../../lib/voiceService";
 
 interface VoiceAssistantProps {
   isRTL: boolean;
@@ -27,23 +36,200 @@ interface VoiceAssistantProps {
   onTranscript?: (text: string, isUser: boolean) => void;
 }
 
+interface Message {
+  id: string;
+  text: string;
+  isUser: boolean;
+  timestamp: Date;
+}
+
 export function VoiceAssistant({
   isRTL,
   translations,
+  onTranscript,
 }: VoiceAssistantProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isHolding, setIsHolding] = useState(false);
+  const [textInput, setTextInput] = useState("");
+  const scrollViewRef = useRef<ScrollView>(null);
+
   const buttonScale = useSharedValue(1);
+  const pulseScale = useSharedValue(1);
+  const pulseOpacity = useSharedValue(0.5);
+  const waveScale1 = useSharedValue(1);
+  const waveScale2 = useSharedValue(1);
+  const waveScale3 = useSharedValue(1);
+
+  // Initialize voice service when modal opens
+  useEffect(() => {
+    if (isModalVisible) {
+      voiceService.initialize({
+        onStateChange: setVoiceState,
+        onTranscript: (text, isUser) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now().toString(),
+              text,
+              isUser,
+              timestamp: new Date(),
+            },
+          ]);
+          onTranscript?.(text, isUser);
+          // Auto scroll to bottom
+          setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        },
+        onError: (err) => {
+          setError(err);
+          setTimeout(() => setError(null), 3000);
+        },
+      });
+
+    }
+
+    return () => {
+      if (!isModalVisible) {
+        voiceService.disconnect();
+      }
+    };
+  }, [isModalVisible]);
+
+  // Animate based on voice state
+  useEffect(() => {
+    if (voiceState === "listening") {
+      // Pulsing animation for listening
+      pulseScale.value = withRepeat(
+        withSequence(
+          withTiming(1.3, { duration: 800 }),
+          withTiming(1, { duration: 800 })
+        ),
+        -1,
+        true
+      );
+      pulseOpacity.value = withRepeat(
+        withSequence(
+          withTiming(0.2, { duration: 800 }),
+          withTiming(0.6, { duration: 800 })
+        ),
+        -1,
+        true
+      );
+    } else if (voiceState === "speaking") {
+      // Wave animation for speaking
+      waveScale1.value = withRepeat(
+        withSequence(
+          withTiming(1.4, { duration: 500 }),
+          withTiming(1, { duration: 500 })
+        ),
+        -1,
+        true
+      );
+      waveScale2.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 300 }),
+          withTiming(1.6, { duration: 500 }),
+          withTiming(1, { duration: 300 })
+        ),
+        -1,
+        true
+      );
+      waveScale3.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 150 }),
+          withTiming(1.8, { duration: 500 }),
+          withTiming(1, { duration: 500 })
+        ),
+        -1,
+        true
+      );
+    } else if (voiceState === "processing") {
+      // Slow pulse for processing
+      pulseScale.value = withRepeat(
+        withSequence(
+          withTiming(1.1, { duration: 600 }),
+          withTiming(1, { duration: 600 })
+        ),
+        -1,
+        true
+      );
+      pulseOpacity.value = 0.4;
+    } else {
+      // Reset animations
+      cancelAnimation(pulseScale);
+      cancelAnimation(pulseOpacity);
+      cancelAnimation(waveScale1);
+      cancelAnimation(waveScale2);
+      cancelAnimation(waveScale3);
+      pulseScale.value = withTiming(1);
+      pulseOpacity.value = withTiming(0.5);
+      waveScale1.value = withTiming(1);
+      waveScale2.value = withTiming(1);
+      waveScale3.value = withTiming(1);
+    }
+  }, [voiceState]);
 
   const handleOpenModal = () => {
     setIsModalVisible(true);
+    setMessages([]);
+    setError(null);
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = async () => {
+    await voiceService.disconnect();
     setIsModalVisible(false);
+    setVoiceState("idle");
+  };
+
+  // Hold to talk handlers
+  const handlePressIn = async () => {
+    if (voiceState === "speaking" || voiceState === "processing") {
+      return; // Don't interrupt while speaking or processing
+    }
+    setIsHolding(true);
+    await voiceService.startListening();
+  };
+
+  const handlePressOut = async () => {
+    if (isHolding) {
+      setIsHolding(false);
+      await voiceService.stopListening();
+    }
+  };
+
+  const handleSendText = async () => {
+    if (!textInput.trim() || voiceState !== "idle") return;
+    const message = textInput.trim();
+    setTextInput("");
+    await voiceService.sendTextMessage(message);
   };
 
   const buttonAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: buttonScale.value }],
+  }));
+
+  const pulseAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseScale.value }],
+    opacity: pulseOpacity.value,
+  }));
+
+  const wave1Style = useAnimatedStyle(() => ({
+    transform: [{ scale: waveScale1.value }],
+    opacity: 0.3,
+  }));
+
+  const wave2Style = useAnimatedStyle(() => ({
+    transform: [{ scale: waveScale2.value }],
+    opacity: 0.2,
+  }));
+
+  const wave3Style = useAnimatedStyle(() => ({
+    transform: [{ scale: waveScale3.value }],
+    opacity: 0.1,
   }));
 
   const handleButtonPressIn = () => {
@@ -53,6 +239,51 @@ export function VoiceAssistant({
   const handleButtonPressOut = () => {
     buttonScale.value = withSpring(1, { damping: 15, stiffness: 400 });
   };
+
+  const getStatusText = () => {
+    switch (voiceState) {
+      case "connecting":
+        return translations.connecting;
+      case "listening":
+        return translations.listening;
+      case "processing":
+        return translations.thinking;
+      case "speaking":
+        return translations.speaking;
+      default:
+        return "Ready";
+    }
+  };
+
+  const getHintText = () => {
+    switch (voiceState) {
+      case "listening":
+        return "Release to send";
+      case "processing":
+        return "Processing...";
+      case "speaking":
+        return "AI is speaking...";
+      default:
+        return "Hold to speak";
+    }
+  };
+
+  const getCircleColor = () => {
+    switch (voiceState) {
+      case "connecting":
+        return "#F59E0B";
+      case "listening":
+        return "#EF4444"; // Red when recording
+      case "processing":
+        return "#6366F1";
+      case "speaking":
+        return "#0D7A5F";
+      default:
+        return "#0D7A5F";
+    }
+  };
+
+  const isActive = voiceState !== "idle";
 
   return (
     <>
@@ -81,7 +312,10 @@ export function VoiceAssistant({
         presentationStyle="pageSheet"
         onRequestClose={handleCloseModal}
       >
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           {/* Header */}
           <View style={[styles.modalHeader, isRTL && styles.modalHeaderRTL]}>
             <Text style={[styles.modalTitle, isRTL && styles.textRTL]}>
@@ -92,28 +326,139 @@ export function VoiceAssistant({
             </Pressable>
           </View>
 
-          {/* Main Content */}
-          <View style={styles.modalContent}>
-            {/* Placeholder Circle */}
-            <View style={styles.voiceCircleContainer}>
-              <View style={styles.voiceCircle}>
-                <View style={styles.largeMicIcon}>
-                  <View style={styles.largeMicHead} />
-                  <View style={styles.largeMicStand} />
-                  <View style={styles.largeMicBase} />
-                </View>
-              </View>
+          {/* Error Banner */}
+          {error && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{error}</Text>
             </View>
+          )}
 
-            {/* Coming Soon Text */}
-            <Text style={[styles.statusText, isRTL && styles.textRTL]}>
-              Coming Soon
-            </Text>
-            <Text style={[styles.descriptionText, isRTL && styles.textRTL]}>
-              Voice assistant will be available in a future update
-            </Text>
+          {/* Messages */}
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.messagesContainer}
+            contentContainerStyle={styles.messagesContent}
+          >
+            {messages.length === 0 && (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>
+                  Hold the button below and speak to start a conversation
+                </Text>
+              </View>
+            )}
+            {messages.map((msg) => (
+              <View
+                key={msg.id}
+                style={[
+                  styles.messageBubble,
+                  msg.isUser ? styles.userBubble : styles.assistantBubble,
+                  isRTL && styles.messageBubbleRTL,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.messageText,
+                    msg.isUser ? styles.userText : styles.assistantText,
+                    isRTL && styles.textRTL,
+                  ]}
+                >
+                  {msg.text}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Voice Circle */}
+          <View style={styles.voiceCircleContainer}>
+            {/* Animated waves for speaking */}
+            {voiceState === "speaking" && (
+              <>
+                <Animated.View
+                  style={[
+                    styles.wave,
+                    { backgroundColor: getCircleColor() },
+                    wave3Style,
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    styles.wave,
+                    { backgroundColor: getCircleColor() },
+                    wave2Style,
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    styles.wave,
+                    { backgroundColor: getCircleColor() },
+                    wave1Style,
+                  ]}
+                />
+              </>
+            )}
+
+            {/* Pulse for listening/processing */}
+            {(voiceState === "listening" || voiceState === "processing") && (
+              <Animated.View
+                style={[
+                  styles.pulse,
+                  { backgroundColor: getCircleColor() },
+                  pulseAnimatedStyle,
+                ]}
+              />
+            )}
+
+            {/* Main Circle Button - Hold to Talk */}
+            <Pressable
+              onPressIn={handlePressIn}
+              onPressOut={handlePressOut}
+              disabled={voiceState === "speaking" || voiceState === "processing"}
+              style={[
+                styles.voiceCircle,
+                { backgroundColor: getCircleColor() },
+                (voiceState === "speaking" || voiceState === "processing") && styles.voiceCircleDisabled,
+              ]}
+            >
+              <View style={styles.largeMicIcon}>
+                <View style={[styles.largeMicHead, { backgroundColor: "#FFFFFF" }]} />
+                <View style={[styles.largeMicStand, { backgroundColor: "#FFFFFF" }]} />
+                <View style={[styles.largeMicBase, { backgroundColor: "#FFFFFF" }]} />
+              </View>
+            </Pressable>
           </View>
-        </View>
+
+          {/* Status Text */}
+          <Text style={[styles.statusText, isRTL && styles.textRTL]}>
+            {getStatusText()}
+          </Text>
+          <Text style={[styles.hintText, isRTL && styles.textRTL]}>
+            {getHintText()}
+          </Text>
+
+          {/* Text Input Alternative */}
+          <View style={styles.textInputContainer}>
+            <TextInput
+              style={styles.textInputField}
+              placeholder="Or type a message..."
+              placeholderTextColor="#A3A3A3"
+              value={textInput}
+              onChangeText={setTextInput}
+              onSubmitEditing={handleSendText}
+              editable={voiceState === "idle"}
+              returnKeyType="send"
+            />
+            <Pressable
+              onPress={handleSendText}
+              disabled={voiceState !== "idle" || !textInput.trim()}
+              style={[
+                styles.sendButton,
+                (voiceState !== "idle" || !textInput.trim()) && styles.sendButtonDisabled,
+              ]}
+            >
+              <Text style={styles.sendButtonText}>Send</Text>
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
@@ -200,63 +545,175 @@ const styles = StyleSheet.create({
     color: "#0D7A5F",
     fontWeight: "600",
   },
-  modalContent: {
+  errorBanner: {
+    backgroundColor: "#FEE2E2",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 8,
+  },
+  errorText: {
+    color: "#DC2626",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  messagesContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  messagesContent: {
+    paddingVertical: 16,
+    flexGrow: 1,
+  },
+  emptyState: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 24,
+    paddingHorizontal: 40,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: "#737373",
+    textAlign: "center",
+    lineHeight: 24,
+  },
+  messageBubble: {
+    maxWidth: "80%",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  messageBubbleRTL: {
+    alignSelf: "flex-end",
+  },
+  userBubble: {
+    backgroundColor: "#0D7A5F",
+    alignSelf: "flex-end",
+    borderBottomRightRadius: 4,
+  },
+  assistantBubble: {
+    backgroundColor: "#FFFFFF",
+    alignSelf: "flex-start",
+    borderBottomLeftRadius: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  messageText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  userText: {
+    color: "#FFFFFF",
+  },
+  assistantText: {
+    color: "#1A1A1A",
   },
   voiceCircleContainer: {
     width: 200,
     height: 200,
     justifyContent: "center",
     alignItems: "center",
+    alignSelf: "center",
+    marginVertical: 20,
   },
-  voiceCircle: {
+  pulse: {
+    position: "absolute",
     width: 160,
     height: 160,
     borderRadius: 80,
-    backgroundColor: "#E8E5E0",
+  },
+  wave: {
+    position: "absolute",
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+  },
+  voiceCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 16,
-    elevation: 6,
+    elevation: 8,
+  },
+  voiceCircleDisabled: {
+    opacity: 0.7,
   },
   largeMicIcon: {
     alignItems: "center",
   },
   largeMicHead: {
-    width: 36,
-    height: 52,
-    backgroundColor: "#A3A3A3",
-    borderRadius: 18,
+    width: 28,
+    height: 40,
+    borderRadius: 14,
   },
   largeMicStand: {
-    width: 4,
-    height: 16,
-    backgroundColor: "#A3A3A3",
-    marginTop: 4,
+    width: 3,
+    height: 12,
+    marginTop: 3,
   },
   largeMicBase: {
-    width: 44,
-    height: 6,
-    backgroundColor: "#A3A3A3",
-    borderRadius: 3,
+    width: 32,
+    height: 4,
+    borderRadius: 2,
     marginTop: 2,
   },
   statusText: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "600",
     color: "#1A1A1A",
-    marginTop: 32,
-  },
-  descriptionText: {
-    fontSize: 15,
-    color: "#737373",
-    marginTop: 12,
     textAlign: "center",
+    marginBottom: 8,
+  },
+  hintText: {
+    fontSize: 14,
+    color: "#737373",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  textInputContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 12,
+  },
+  textInputField: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: "#1A1A1A",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  sendButton: {
+    backgroundColor: "#0D7A5F",
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sendButtonDisabled: {
+    backgroundColor: "#A3A3A3",
+  },
+  sendButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
