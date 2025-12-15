@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
 import { Platform } from "react-native";
+import { UserType, Profile } from "@/types";
 
 // For OAuth redirect
 const redirectUrl = makeRedirectUri({
@@ -25,13 +26,19 @@ export async function signInWithEmail(email: string, password: string) {
   return { user: data.user, error: null };
 }
 
-export async function signUpWithEmail(email: string, password: string, fullName?: string) {
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  fullName?: string,
+  userType: UserType = "user"
+) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: {
         full_name: fullName,
+        user_type: userType,
       },
     },
   });
@@ -187,4 +194,71 @@ export async function getUser() {
 
 export function onAuthStateChange(callback: (event: string, session: any) => void) {
   return supabase.auth.onAuthStateChange(callback);
+}
+
+// ============ PROFILE FUNCTIONS ============
+
+export async function getProfile(userId: string): Promise<{ profile: Profile | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (error) {
+    console.error("Get profile error:", error.message);
+    return { profile: null, error: error.message };
+  }
+
+  return { profile: data as Profile, error: null };
+}
+
+export async function updateProfile(
+  userId: string,
+  updates: Partial<Profile>
+): Promise<{ profile: Profile | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .update(updates)
+    .eq("id", userId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Update profile error:", error.message);
+    return { profile: null, error: error.message };
+  }
+
+  return { profile: data as Profile, error: null };
+}
+
+export async function upgradeUserType(
+  userId: string,
+  newType: "business" | "provider"
+): Promise<{ success: boolean; error: string | null }> {
+  // First verify current type is 'user'
+  const { data: profile, error: fetchError } = await supabase
+    .from("profiles")
+    .select("user_type")
+    .eq("id", userId)
+    .single();
+
+  if (fetchError) {
+    return { success: false, error: fetchError.message };
+  }
+
+  if (profile?.user_type !== "user") {
+    return { success: false, error: "Cannot upgrade: already a business or provider" };
+  }
+
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update({ user_type: newType })
+    .eq("id", userId);
+
+  if (updateError) {
+    return { success: false, error: updateError.message };
+  }
+
+  return { success: true, error: null };
 }
