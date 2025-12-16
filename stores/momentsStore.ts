@@ -64,10 +64,27 @@ export const useMomentsStore = create<MomentsState>((set, get) => ({
         return false;
       }
 
+      // Handle content:// URIs on Android by copying to cache first
+      let localUri = imageUri;
+      if (imageUri.startsWith("content://") || imageUri.startsWith("ph://")) {
+        const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpg";
+        const cacheUri = `${FileSystem.cacheDirectory}temp_moment_${Date.now()}.${fileExt}`;
+        await FileSystem.copyAsync({
+          from: imageUri,
+          to: cacheUri,
+        });
+        localUri = cacheUri;
+      }
+
       // Read the image file and convert to base64
-      const base64 = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
+      const base64 = await FileSystem.readAsStringAsync(localUri, {
+        encoding: "base64",
       });
+
+      // Clean up temp file if we created one
+      if (localUri !== imageUri) {
+        FileSystem.deleteAsync(localUri, { idempotent: true }).catch(() => {});
+      }
 
       // Generate unique filename
       const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpg";
