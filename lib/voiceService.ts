@@ -49,9 +49,13 @@ class VoiceService {
       // Stop any existing recording
       if (this.recording) {
         try {
-          await this.recording.stopAndUnloadAsync();
+          const status = await this.recording.getStatusAsync();
+          if (status.isRecording) {
+            await this.recording.stopAndUnloadAsync();
+          }
         } catch (e) {
-          // Ignore
+          // Ignore - recorder might already be unloaded
+          console.log('Cleanup of previous recording:', e);
         }
         this.recording = null;
       }
@@ -65,6 +69,7 @@ class VoiceService {
       console.log('Recording started');
     } catch (error) {
       console.error('Failed to start recording:', error);
+      this.recording = null;
       this.callbacks?.onError('Failed to start microphone');
       this.callbacks?.onStateChange('idle');
     }
@@ -80,8 +85,24 @@ class VoiceService {
 
     try {
       console.log('Stopping recording...');
-      await this.recording.stopAndUnloadAsync();
+
+      // Check if recording is still valid before stopping
+      const status = await this.recording.getStatusAsync();
+      if (!status.isRecording && !status.isDoneRecording) {
+        console.log('Recording not in valid state, cleaning up');
+        this.recording = null;
+        this.callbacks?.onStateChange('idle');
+        return;
+      }
+
+      // Get URI before stopping (in case stop fails)
       const uri = this.recording.getURI();
+
+      // Only stop if still recording
+      if (status.isRecording) {
+        await this.recording.stopAndUnloadAsync();
+      }
+
       this.recording = null;
 
       if (uri) {
@@ -91,8 +112,18 @@ class VoiceService {
         console.log('No URI from recording');
         this.callbacks?.onStateChange('idle');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error stopping recording:', error);
+      // Always clean up the recording reference on error
+      this.recording = null;
+
+      // Don't show error for "Recorder does not exist" - just clean up
+      if (error?.message?.includes('Recorder does not exist')) {
+        console.log('Recorder already cleaned up');
+        this.callbacks?.onStateChange('idle');
+        return;
+      }
+
       this.callbacks?.onError('Recording failed');
       this.callbacks?.onStateChange('idle');
     }
@@ -102,9 +133,17 @@ class VoiceService {
     try {
       console.log('Processing audio from:', uri);
 
-      // For demo: simulate user message and get AI response
-      // In production, you'd use a Speech-to-Text service here
-      const userMessage = "Hello, I need help planning a trip";
+      // Transcribe audio using Whisper API
+      const userMessage = await this.transcribeAudio(uri);
+
+      if (!userMessage || userMessage.trim().length === 0) {
+        console.log('No speech detected');
+        this.callbacks?.onError('No speech detected');
+        this.callbacks?.onStateChange('idle');
+        return;
+      }
+
+      console.log('Transcribed:', userMessage);
       this.callbacks?.onTranscript(userMessage, true);
 
       // Get AI response
@@ -120,6 +159,66 @@ class VoiceService {
       console.error('Error processing audio:', error);
       this.callbacks?.onError('Processing failed');
       this.callbacks?.onStateChange('idle');
+    }
+  }
+
+  private async transcribeAudio(uri: string): Promise<string> {
+    const hasGroqKey = AI_CONFIG.groqApiKey && AI_CONFIG.groqApiKey.length > 10;
+    const hasOpenAIKey = AI_CONFIG.openaiApiKey && AI_CONFIG.openaiApiKey.length > 10;
+
+    if (!hasGroqKey && !hasOpenAIKey) {
+      console.log('No API key for transcription');
+      throw new Error('No API key configured for speech-to-text');
+    }
+
+    try {
+      // Create form data with file URI (React Native style)
+      const formData = new FormData();
+
+      // React Native FormData accepts file objects with uri, type, name
+      formData.append('file', {
+        uri: uri,
+        type: 'audio/m4a',
+        name: 'audio.m4a',
+      } as any);
+
+      let response: Response;
+
+      if (hasGroqKey) {
+        // Use Groq Whisper API
+        console.log('Transcribing with Groq Whisper...');
+        formData.append('model', 'whisper-large-v3');
+        response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${AI_CONFIG.groqApiKey}`,
+          },
+          body: formData,
+        });
+      } else {
+        // Use OpenAI Whisper API
+        console.log('Transcribing with OpenAI Whisper...');
+        formData.append('model', 'whisper-1');
+        response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${AI_CONFIG.openaiApiKey}`,
+          },
+          body: formData,
+        });
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Whisper API error:', response.status, errorText);
+        throw new Error(`Transcription failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.text || '';
+    } catch (error) {
+      console.error('Transcription error:', error);
+      throw error;
     }
   }
 
@@ -283,15 +382,13 @@ Be concise (2-3 sentences max), helpful, and enthusiastic. If asked about specif
       }
       const base64Audio = btoa(binary);
 
-      console.log('Converted to base64, length:', base64Audio.length);
-
-      // Save to file and play
-      const audioUri = FileSystem.cacheDirectory + 'tts_response.mp3';
+      // Use temp file with timestamp to avoid conflicts, auto-cleanup
+      const audioUri = FileSystem.cacheDirectory + `tts_${Date.now()}.mp3`;
       await FileSystem.writeAsStringAsync(audioUri, base64Audio, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      console.log('Saved audio to:', audioUri);
+      console.log('Playing audio...');
 
       // Unload previous sound
       if (this.sound) {
@@ -307,10 +404,16 @@ Be concise (2-3 sentences max), helpful, and enthusiastic. If asked about specif
       this.sound = sound;
       console.log('Playing audio...');
 
-      sound.setOnPlaybackStatusUpdate((status) => {
+      sound.setOnPlaybackStatusUpdate(async (status) => {
         if (status.isLoaded && status.didJustFinish) {
           console.log('Finished playing');
           this.callbacks?.onStateChange('idle');
+          // Clean up temp file
+          try {
+            await FileSystem.deleteAsync(audioUri, { idempotent: true });
+          } catch (e) {
+            // Ignore cleanup errors
+          }
         }
       });
 
