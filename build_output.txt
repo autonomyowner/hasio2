@@ -1,0 +1,36 @@
+★ eas-cli@16.28.0 is now available.
+To upgrade, run:
+npm install -g eas-cli
+Proceeding with outdated version.
+
+Resolved "preview" environment for the build. Learn more: https://docs.expo.dev/eas/environment-variables/#setting-the-environment-for-your-builds
+No environment variables with visibility "Plain text" and "Sensitive" found for the "preview" environment on EAS.
+Environment variables loaded from the "preview" build profile "env" configuration: EXPO_NO_CAPABILITY_SYNC.
+
+✔ Using remote Android credentials (Expo server)
+✔ Using Keystore from configuration: Build Credentials J--fsuAqb8 (default)
+
+Compressing project files and uploading to EAS Build. Learn more: https://expo.fyi/eas-build-archive
+- Compressing project files
+- Uploading to EAS Build (0 / 6.9 MB)
+✔ Uploaded to EAS 2s
+- Computing project fingerprint
+⌛️ Computing the project fingerprint is taking longer than expected...
+⏩ To skip this step, set the environment variable: EAS_SKIP_AUTO_FINGERPRINT=1
+✔ Computed project fingerprint
+
+See logs: https://expo.dev/accounts/autonomy.owner/projects/hasio/builds/3fa0dd5e-812f-4e4e-9de5-96e4420b3de1
+
+Waiting for build to complete. You can press Ctrl+C to exit.
+- Waiting for build to complete.
+  Build queued...
+
+Start builds sooner in the priority queue.
+Sign up for a paid plan at https://expo.dev/accounts/autonomy.owner/settings/billing
+
+Waiting in Free tier queue
+
+- Build is about to start
+✖ Build failed
+🤖 Android build failed:
+Gradle build failed with unknown error. See logs for the "Run gradlew" (https://expo.dev/accounts/autonomy.owner/projects/hasio/builds/3fa0dd5e-812f-4e4e-9de5-96e4420b3de1#run-gradlew) phase for more information.

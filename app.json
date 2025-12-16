@@ -8,7 +8,7 @@
     "icon": "./assets/IconKitchen-Output/android/play_store_512.png",
     "userInterfaceStyle": "automatic",
     "sdkVersion": "54.0.0",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/IconKitchen-Output/android/play_store_512.png",
       "resizeMode": "contain",
