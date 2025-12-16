@@ -5,22 +5,29 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "hasio",
+    "icon": "./assets/IconKitchen-Output/android/play_store_512.png",
     "userInterfaceStyle": "automatic",
     "sdkVersion": "54.0.0",
     "newArchEnabled": false,
     "splash": {
+      "image": "./assets/IconKitchen-Output/android/play_store_512.png",
+      "resizeMode": "contain",
       "backgroundColor": "#FAF7F2"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.hasio",
+      "icon": "./assets/IconKitchen-Output/ios/AppIcon@2x.png",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Hasio needs access to your microphone to enable voice conversations with the travel assistant."
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0D7A5F"
+        "foregroundImage": "./assets/IconKitchen-Output/android/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+        "backgroundImage": "./assets/IconKitchen-Output/android/res/mipmap-xxxhdpi/ic_launcher_background.png",
+        "monochromeImage": "./assets/IconKitchen-Output/android/res/mipmap-xxxhdpi/ic_launcher_monochrome.png",
+        "backgroundColor": "#F5A623"
       },
       "package": "app.rork.hasio",
       "permissions": [
@@ -29,7 +36,8 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static"
+      "output": "static",
+      "favicon": "./assets/IconKitchen-Output/web/favicon.ico"
     },
     "plugins": [
       "expo-router",
