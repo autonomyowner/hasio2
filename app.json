@@ -5,28 +5,28 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "hasio",
-    "icon": "./assets/IconKitchen-Output/android/play_store_512.png",
+    "icon": "./assets/IconKitchen-Output1/android/play_store_512.png",
     "userInterfaceStyle": "automatic",
     "sdkVersion": "54.0.0",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/IconKitchen-Output/android/play_store_512.png",
+      "image": "./assets/IconKitchen-Output1/android/play_store_512.png",
       "resizeMode": "contain",
       "backgroundColor": "#FAF7F2"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.hasio",
-      "icon": "./assets/IconKitchen-Output/ios/AppIcon@2x.png",
+      "icon": "./assets/IconKitchen-Output1/ios/AppIcon@2x.png",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Hasio needs access to your microphone to enable voice conversations with the travel assistant."
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/IconKitchen-Output/android/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
-        "backgroundImage": "./assets/IconKitchen-Output/android/res/mipmap-xxxhdpi/ic_launcher_background.png",
-        "monochromeImage": "./assets/IconKitchen-Output/android/res/mipmap-xxxhdpi/ic_launcher_monochrome.png",
+        "foregroundImage": "./assets/IconKitchen-Output1/android/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+        "backgroundImage": "./assets/IconKitchen-Output1/android/res/mipmap-xxxhdpi/ic_launcher_background.png",
+        "monochromeImage": "./assets/IconKitchen-Output1/android/res/mipmap-xxxhdpi/ic_launcher_monochrome.png",
         "backgroundColor": "#F5A623"
       },
       "package": "app.rork.hasio",
@@ -37,7 +37,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/IconKitchen-Output/web/favicon.ico"
+      "favicon": "./assets/IconKitchen-Output1/web/favicon.ico"
     },
     "plugins": [
       "expo-router",

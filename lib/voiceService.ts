@@ -1,5 +1,6 @@
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system/next';
+import * as Speech from 'expo-speech';
 import { ELEVENLABS_CONFIG, AI_CONFIG } from './elevenlabs';
 
 type VoiceState = 'idle' | 'connecting' | 'listening' | 'processing' | 'speaking';
@@ -373,20 +374,17 @@ Be concise (2-3 sentences max), helpful, and enthusiastic. If asked about specif
 
       console.log('Got audio response from ElevenLabs');
 
-      // Get the audio as array buffer and convert to base64
+      // Get the audio as blob and convert to base64
       const arrayBuffer = await response.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const base64Audio = btoa(binary);
 
-      // Use temp file with timestamp to avoid conflicts, auto-cleanup
-      const audioUri = FileSystem.cacheDirectory + `tts_${Date.now()}.mp3`;
-      await FileSystem.writeAsStringAsync(audioUri, base64Audio, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      // Convert to base64 using a React Native compatible method
+      const base64Audio = this.uint8ArrayToBase64(bytes);
+
+      // Use temp file with timestamp to avoid conflicts
+      const audioPath = Paths.cache.uri + `tts_${Date.now()}.mp3`;
+      const audioFile = new File(audioPath);
+      await audioFile.write(base64Audio, { encoding: 'base64' });
 
       console.log('Playing audio...');
 
@@ -397,7 +395,7 @@ Be concise (2-3 sentences max), helpful, and enthusiastic. If asked about specif
 
       // Play the audio
       const { sound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
+        { uri: audioPath },
         { shouldPlay: true, volume: 1.0 }
       );
 
@@ -410,7 +408,7 @@ Be concise (2-3 sentences max), helpful, and enthusiastic. If asked about specif
           this.callbacks?.onStateChange('idle');
           // Clean up temp file
           try {
-            await FileSystem.deleteAsync(audioUri, { idempotent: true });
+            await audioFile.delete();
           } catch (e) {
             // Ignore cleanup errors
           }
@@ -418,13 +416,73 @@ Be concise (2-3 sentences max), helpful, and enthusiastic. If asked about specif
       });
 
     } catch (error) {
-      console.error('Error in TTS:', error);
-      this.callbacks?.onError('Speech generation failed');
+      console.error('Error in ElevenLabs TTS, falling back to device speech:', error);
+      // Fallback to device TTS
+      await this.speakWithDeviceTTS(text);
+    }
+  }
+
+  // Helper method to convert Uint8Array to base64 (React Native compatible)
+  private uint8ArrayToBase64(bytes: Uint8Array): string {
+    const CHUNK_SIZE = 0x8000; // 32KB chunks to avoid call stack issues
+    const chunks: string[] = [];
+
+    for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+      const chunk = bytes.subarray(i, i + CHUNK_SIZE);
+      chunks.push(String.fromCharCode.apply(null, Array.from(chunk)));
+    }
+
+    const binary = chunks.join('');
+
+    // Use a simple base64 encoding that works in React Native
+    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let result = '';
+    let i = 0;
+
+    while (i < binary.length) {
+      const a = binary.charCodeAt(i++);
+      const b = i < binary.length ? binary.charCodeAt(i++) : 0;
+      const c = i < binary.length ? binary.charCodeAt(i++) : 0;
+
+      const triplet = (a << 16) | (b << 8) | c;
+
+      result += base64Chars[(triplet >> 18) & 0x3F];
+      result += base64Chars[(triplet >> 12) & 0x3F];
+      result += i > binary.length + 1 ? '=' : base64Chars[(triplet >> 6) & 0x3F];
+      result += i > binary.length ? '=' : base64Chars[triplet & 0x3F];
+    }
+
+    return result;
+  }
+
+  private async speakWithDeviceTTS(text: string) {
+    try {
+      console.log('Using device TTS fallback...');
+      await Speech.speak(text, {
+        language: 'en-US',
+        pitch: 1.0,
+        rate: 0.9,
+        onDone: () => {
+          console.log('Device TTS finished');
+          this.callbacks?.onStateChange('idle');
+        },
+        onError: (error) => {
+          console.error('Device TTS error:', error);
+          this.callbacks?.onError('Speech failed');
+          this.callbacks?.onStateChange('idle');
+        },
+      });
+    } catch (error) {
+      console.error('Device TTS error:', error);
+      this.callbacks?.onError('Speech failed');
       this.callbacks?.onStateChange('idle');
     }
   }
 
   async disconnect() {
+    // Stop device TTS if running
+    Speech.stop();
+
     if (this.sound) {
       try {
         await this.sound.stopAsync();

@@ -1,7 +1,32 @@
 import { create } from "zustand";
 import { supabase } from "@/lib/supabase";
-import * as FileSystem from "expo-file-system";
+import { File, Paths } from "expo-file-system/next";
 import { decode } from "base64-arraybuffer";
+
+// Helper to convert base64 to Uint8Array (more reliable than decode in some RN builds)
+function base64ToUint8Array(base64: string): Uint8Array {
+  const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+  // Remove padding
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  const base64Clean = base64.replace(/=/g, '');
+
+  const bytes = new Uint8Array((base64Clean.length * 3) / 4 - padding);
+  let byteIndex = 0;
+
+  for (let i = 0; i < base64Clean.length; i += 4) {
+    const a = base64Chars.indexOf(base64Clean[i]);
+    const b = base64Chars.indexOf(base64Clean[i + 1]);
+    const c = base64Chars.indexOf(base64Clean[i + 2]);
+    const d = base64Chars.indexOf(base64Clean[i + 3]);
+
+    bytes[byteIndex++] = (a << 2) | (b >> 4);
+    if (byteIndex < bytes.length) bytes[byteIndex++] = ((b & 15) << 4) | (c >> 2);
+    if (byteIndex < bytes.length) bytes[byteIndex++] = ((c & 3) << 6) | d;
+  }
+
+  return bytes;
+}
 
 export interface Moment {
   id: string;
@@ -57,48 +82,61 @@ export const useMomentsStore = create<MomentsState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
+      console.log("Adding moment with URI:", imageUri);
+
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
+        console.log("User not authenticated");
         set({ error: "User not authenticated", isLoading: false });
         return false;
       }
 
-      // Handle content:// URIs on Android by copying to cache first
-      let localUri = imageUri;
-      if (imageUri.startsWith("content://") || imageUri.startsWith("ph://")) {
-        const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpg";
-        const cacheUri = `${FileSystem.cacheDirectory}temp_moment_${Date.now()}.${fileExt}`;
-        await FileSystem.copyAsync({
-          from: imageUri,
-          to: cacheUri,
-        });
-        localUri = cacheUri;
+      console.log("User ID:", user.id);
+
+      // Determine file extension - default to jpg for content:// URIs
+      let fileExt = "jpg";
+      if (imageUri.includes(".")) {
+        const ext = imageUri.split(".").pop()?.toLowerCase();
+        if (ext && ["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) {
+          fileExt = ext;
+        }
       }
 
-      // Read the image file and convert to base64
-      const base64 = await FileSystem.readAsStringAsync(localUri, {
-        encoding: "base64",
-      });
-
-      // Clean up temp file if we created one
-      if (localUri !== imageUri) {
-        FileSystem.deleteAsync(localUri, { idempotent: true }).catch(() => {});
-      }
+      // Read file using new File API
+      console.log("Reading file as base64...");
+      const file = new File(imageUri);
+      const base64 = await file.base64();
+      console.log("Base64 length:", base64.length);
 
       // Generate unique filename
-      const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpg";
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      console.log("Uploading to:", fileName);
 
       // Upload to Supabase Storage
+      console.log("Starting Supabase upload...");
+
+      // Try using decode first, fall back to custom decoder if it fails
+      let uploadData: ArrayBuffer | Uint8Array;
+      try {
+        uploadData = decode(base64);
+      } catch (decodeError) {
+        console.log("decode() failed, using fallback:", decodeError);
+        uploadData = base64ToUint8Array(base64);
+      }
+
       const { error: uploadError } = await supabase.storage
         .from("moments")
-        .upload(fileName, decode(base64), {
+        .upload(fileName, uploadData, {
           contentType: `image/${fileExt === "jpg" ? "jpeg" : fileExt}`,
           upsert: false,
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("Upload error details:", JSON.stringify(uploadError, null, 2));
+        throw new Error(`Upload failed: ${uploadError.message || 'Unknown error'}`);
+      }
+      console.log("Upload successful!");
 
       // Get public URL
       const { data: urlData } = supabase.storage
@@ -106,8 +144,10 @@ export const useMomentsStore = create<MomentsState>((set, get) => ({
         .getPublicUrl(fileName);
 
       const imageUrl = urlData.publicUrl;
+      console.log("Image URL:", imageUrl);
 
       // Insert moment record
+      console.log("Inserting moment record...");
       const { data: momentData, error: insertError } = await supabase
         .from("moments")
         .insert({
@@ -119,7 +159,11 @@ export const useMomentsStore = create<MomentsState>((set, get) => ({
         .select()
         .single();
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("Insert error:", insertError);
+        throw insertError;
+      }
+      console.log("Moment saved successfully!");
 
       // Add to local state
       set((state) => ({
@@ -129,8 +173,10 @@ export const useMomentsStore = create<MomentsState>((set, get) => ({
 
       return true;
     } catch (error: any) {
-      console.error("Error adding moment:", error.message);
-      set({ error: error.message, isLoading: false });
+      const errorMsg = error?.message || error?.toString() || "Unknown error occurred";
+      console.error("Error adding moment:", errorMsg);
+      console.error("Full error:", JSON.stringify(error, null, 2));
+      set({ error: errorMsg, isLoading: false });
       return false;
     }
   },
