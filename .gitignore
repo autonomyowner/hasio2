@@ -8,9 +8,9 @@ node_modules/
 dist/
 web-build/
 
-# Native
-android/
-ios/
+# Native (root folders only)
+/android/
+/ios/
 *.orig.*
 *.jks
 *.p8
