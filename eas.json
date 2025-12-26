@@ -25,8 +25,7 @@
     "production": {
       "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle",
-        "image": "ubuntu-22.04-jdk-17-ndk-r26b"
+        "buildType": "app-bundle"
       },
       "env": {
         "EXPO_NO_CAPABILITY_SYNC": "1"
