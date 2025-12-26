@@ -26,13 +26,11 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/IconKitchen-Output/android/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
-        "backgroundImage": "./assets/IconKitchen-Output/android/res/mipmap-xxxhdpi/ic_launcher_background.png",
-        "monochromeImage": "./assets/IconKitchen-Output/android/res/mipmap-xxxhdpi/ic_launcher_monochrome.png",
+        "foregroundImage": "./assets/IconKitchen-Output/android/play_store_512.png",
         "backgroundColor": "#F5A623"
       },
       "package": "app.rork.hasio",
-      "versionCode": 6,
+      "versionCode": 9,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
