@@ -2,6 +2,7 @@ import { Audio } from 'expo-av';
 import { File, Paths } from 'expo-file-system/next';
 import * as Speech from 'expo-speech';
 import { ELEVENLABS_CONFIG, AI_CONFIG } from './elevenlabs';
+import { HASIO_SYSTEM_PROMPT, getAlahsaFallbackResponse, isArabicText } from './alahsaKnowledge';
 
 type VoiceState = 'idle' | 'connecting' | 'listening' | 'processing' | 'speaking';
 
@@ -227,15 +228,13 @@ class VoiceService {
     // Add to conversation history
     this.conversationHistory.push({ role: 'user', content: userMessage });
 
-    // System prompt for the travel assistant
-    const systemPrompt = `You are Hasio, a friendly and knowledgeable travel assistant. You help users:
-- Find hotels and accommodations
-- Discover restaurants and local food
-- Plan trips and itineraries
-- Learn about destinations and attractions
-- Get travel tips and recommendations
+    // Detect if user is speaking Arabic to respond appropriately
+    const userSpeaksArabic = isArabicText(userMessage);
 
-Be concise (2-3 sentences max), helpful, and enthusiastic. If asked about specific places like Riyadh, Dubai, Paris, etc., give relevant local recommendations. Always be specific and actionable in your responses.`;
+    // Enhanced system prompt with Al-Ahsa knowledge + language instruction
+    const systemPrompt = HASIO_SYSTEM_PROMPT + (userSpeaksArabic
+      ? '\n\nIMPORTANT: The user is speaking Arabic. Respond in Arabic (العربية).'
+      : '\n\nIMPORTANT: The user is speaking English. Respond in English.');
 
     // Check if we have an API key configured
     const hasGroqKey = AI_CONFIG.groqApiKey && AI_CONFIG.groqApiKey.length > 10;
@@ -306,39 +305,21 @@ Be concise (2-3 sentences max), helpful, and enthusiastic. If asked about specif
   }
 
   private getFallbackResponse(userMessage: string): string {
-    const lowerMessage = userMessage.toLowerCase();
-
-    // Smart fallback responses based on keywords
-    if (lowerMessage.includes('hotel') || lowerMessage.includes('stay') || lowerMessage.includes('accommodation')) {
-      if (lowerMessage.includes('riyadh') || lowerMessage.includes('riad')) {
-        return "For Riyadh, I recommend checking out the Four Seasons at Kingdom Centre for luxury, or the Narcissus Hotel for a great mid-range option. The Diplomatic Quarter area is perfect for business travelers!";
-      }
-      if (lowerMessage.includes('dubai')) {
-        return "Dubai has amazing hotels! The Burj Al Arab is iconic for luxury, Address Downtown for stunning Burj Khalifa views, or Rove Hotels for stylish budget options.";
-      }
-      return "I can help you find great hotels! What city are you traveling to, and what's your preferred budget range?";
-    }
-
-    if (lowerMessage.includes('food') || lowerMessage.includes('restaurant') || lowerMessage.includes('eat')) {
-      if (lowerMessage.includes('riyadh') || lowerMessage.includes('riad')) {
-        return "Riyadh has incredible dining! Try Najd Village for authentic Saudi cuisine, LPM for French-Mediterranean, or The Globe at Al Faisaliah for stunning views while dining.";
-      }
-      return "I know amazing restaurants! Which city are you interested in, and do you prefer local cuisine or international options?";
-    }
-
-    if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || lowerMessage.includes('hey')) {
-      return "Hello! I'm Hasio, your travel assistant. I can help you find hotels, restaurants, and plan amazing experiences. What destination are you interested in?";
-    }
-
-    if (lowerMessage.includes('trip') || lowerMessage.includes('plan') || lowerMessage.includes('visit')) {
-      return "I'd love to help plan your trip! Tell me where you're thinking of going, and I'll suggest the best hotels, restaurants, and things to do.";
-    }
-
-    return "I'm here to help with your travel plans! You can ask me about hotels, restaurants, or trip planning for any destination.";
+    // Use the comprehensive Al-Ahsa specific fallback responses
+    return getAlahsaFallbackResponse(userMessage);
   }
 
   private async speakText(text: string) {
     this.callbacks?.onStateChange('speaking');
+
+    // Check if ElevenLabs API key is configured
+    const hasElevenLabsKey = ELEVENLABS_CONFIG.apiKey && ELEVENLABS_CONFIG.apiKey.length > 10;
+
+    if (!hasElevenLabsKey) {
+      console.log('No ElevenLabs API key, using device TTS');
+      await this.speakWithDeviceTTS(text);
+      return;
+    }
 
     try {
       console.log('Generating speech for:', text.substring(0, 50) + '...');
@@ -458,10 +439,15 @@ Be concise (2-3 sentences max), helpful, and enthusiastic. If asked about specif
   private async speakWithDeviceTTS(text: string) {
     try {
       console.log('Using device TTS fallback...');
+
+      // Detect if text is Arabic and use appropriate language
+      const isArabic = isArabicText(text);
+      const language = isArabic ? 'ar-SA' : 'en-US';
+
       await Speech.speak(text, {
-        language: 'en-US',
+        language: language,
         pitch: 1.0,
-        rate: 0.9,
+        rate: isArabic ? 0.85 : 0.9, // Slightly slower for Arabic
         onDone: () => {
           console.log('Device TTS finished');
           this.callbacks?.onStateChange('idle');

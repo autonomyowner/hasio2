@@ -1,6 +1,8 @@
 // ElevenLabs Conversational AI Configuration
+// IMPORTANT: API key must be set via environment variable EXPO_PUBLIC_ELEVENLABS_API_KEY
+// Never commit API keys to source code
 export const ELEVENLABS_CONFIG = {
-  apiKey: process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY || "sk_8a60c953856253ed965d26ecf875e04e2364903f362768ab",
+  apiKey: process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY || '',
   agentId: "agent_9701kcffp034epb9apq1astrvjbh",
 };
 
