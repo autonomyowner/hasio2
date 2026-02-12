@@ -1,5 +1,15 @@
 import type { NextConfig } from "next";
 import path from "path";
+import fs from "fs";
+
+// Use parent dirs locally, fall back to local copies on Vercel
+const convexDir = fs.existsSync(path.resolve(__dirname, "../convex"))
+  ? path.resolve(__dirname, "../convex")
+  : path.resolve(__dirname, "convex-local");
+
+const constantsDir = fs.existsSync(path.resolve(__dirname, "../constants"))
+  ? path.resolve(__dirname, "../constants")
+  : path.resolve(__dirname, "constants-local");
 
 const nextConfig: NextConfig = {
   images: {
@@ -13,8 +23,8 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      "@convex": path.resolve(__dirname, "../convex"),
-      "@constants": path.resolve(__dirname, "../constants"),
+      "@convex": convexDir,
+      "@constants": constantsDir,
     };
     return config;
   },
