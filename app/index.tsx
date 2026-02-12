@@ -1,24 +1,24 @@
 import { useEffect } from "react";
 import { useRouter } from "expo-router";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { authClient } from "@/lib/authClient";
 import { useAppStore } from "@/stores/appStore";
-import { useAuthStore } from "@/stores/authStore";
 
 export default function Index() {
   const router = useRouter();
   const hasCompletedOnboarding = useAppStore(
     (state) => state.hasCompletedOnboarding
   );
-  const { isInitialized, user } = useAuthStore();
+  const { data: session, isPending } = authClient.useSession();
 
   useEffect(() => {
-    // Wait for auth to initialize
-    if (!isInitialized) return;
+    // Wait for session to load
+    if (isPending) return;
 
     // Small delay for smooth transition
     const timer = setTimeout(() => {
-      // If logged in or completed onboarding, go to main app
-      if (user || hasCompletedOnboarding) {
+      // If signed in or completed onboarding, go to main app
+      if (session || hasCompletedOnboarding) {
         router.replace("/(tabs)");
       } else {
         router.replace("/onboarding");
@@ -26,7 +26,7 @@ export default function Index() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [isInitialized, user, hasCompletedOnboarding]);
+  }, [isPending, session, hasCompletedOnboarding]);
 
   return (
     <View style={styles.container}>

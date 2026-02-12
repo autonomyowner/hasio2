@@ -14,7 +14,7 @@ import {
   PlusJakartaSans_700Bold,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import "react-native-reanimated";
-import { initAuthListener } from "@/stores/authStore";
+import { ConvexAuthProvider } from "@/providers/ConvexAuthProvider";
 
 import "../global.css";
 
@@ -32,11 +32,6 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    // Initialize auth listener once (non-blocking)
-    initAuthListener();
-  }, []);
-
-  useEffect(() => {
     if (fontsLoaded) {
       SplashScreen.hideAsync();
     }
@@ -47,7 +42,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <ConvexAuthProvider>
       <Stack
         screenOptions={{
           headerShown: false,
@@ -63,6 +58,6 @@ export default function RootLayout() {
         <Stack.Screen name="provider" />
       </Stack>
       <StatusBar style="dark" />
-    </>
+    </ConvexAuthProvider>
   );
 }

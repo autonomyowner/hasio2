@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -15,56 +15,26 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { useLanguage } from "@/hooks/useLanguage";
-import { useAuthStore } from "@/stores/authStore";
-import { supabase } from "@/lib/supabase";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-interface ServiceStats {
-  total: number;
-  pending: number;
-  approved: number;
-}
 
 export default function ProviderDashboardContent() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t, isRTL } = useLanguage();
-  const user = useAuthStore((state) => state.user);
 
-  const [stats, setStats] = useState<ServiceStats>({
-    total: 0,
-    pending: 0,
-    approved: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
+  // Fetch real stats from Convex
+  const services = useQuery(api.services.byOwner);
+  const isLoading = services === undefined;
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    if (!user?.id) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("services")
-        .select("status")
-        .eq("owner_id", user.id);
-
-      if (error) throw error;
-
-      const total = data?.length || 0;
-      const pending = data?.filter((item) => item.status === "pending").length || 0;
-      const approved = data?.filter((item) => item.status === "approved").length || 0;
-
-      setStats({ total, pending, approved });
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    } finally {
-      setIsLoading(false);
-    }
+  // Calculate stats
+  const stats = {
+    total: services?.length || 0,
+    pending: services?.filter(s => s.status === 'pending').length || 0,
+    approved: services?.filter(s => s.status === 'approved').length || 0,
   };
 
   return (
@@ -89,11 +59,13 @@ export default function ProviderDashboardContent() {
           style={styles.statsContainer}
         >
           {isLoading ? (
-            <ActivityIndicator size="small" color="#0D7A5F" />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#0D7A5F" />
+            </View>
           ) : (
             <View style={[styles.statsRow, isRTL && styles.statsRowRTL]}>
               <StatCard
-                label={t("myServices")}
+                label={t("totalServices")}
                 value={stats.total}
                 color="#0D7A5F"
                 isRTL={isRTL}
@@ -114,17 +86,15 @@ export default function ProviderDashboardContent() {
           )}
         </Animated.View>
 
-        {/* First listing note */}
-        {stats.total === 0 && !isLoading && (
-          <Animated.View
-            entering={FadeInDown.delay(250).duration(600)}
-            style={styles.noteContainer}
-          >
-            <Text style={[styles.noteText, isRTL && styles.textRTL]}>
-              {t("firstListingNote")}
-            </Text>
-          </Animated.View>
-        )}
+        {/* Admin approval note */}
+        <Animated.View
+          entering={FadeInDown.delay(250).duration(600)}
+          style={styles.noteContainer}
+        >
+          <Text style={[styles.noteText, isRTL && styles.textRTL]}>
+            {t("firstListingNote")}
+          </Text>
+        </Animated.View>
 
         {/* Action Buttons */}
         <Animated.View entering={FadeInDown.delay(300).duration(600)}>
@@ -244,6 +214,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 20,
   },
+  loadingContainer: {
+    padding: 20,
+    alignItems: "center",
+  },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -276,14 +250,14 @@ const styles = StyleSheet.create({
   },
   noteContainer: {
     marginHorizontal: 24,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: "#DBEAFE",
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
   },
   noteText: {
     fontSize: 14,
-    color: "#92400E",
+    color: "#1E40AF",
     textAlign: "center",
   },
   actionButton: {

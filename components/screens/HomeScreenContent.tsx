@@ -20,8 +20,9 @@ import Animated, {
   Extrapolation,
 } from "react-native-reanimated";
 import { useLanguage, getLocalizedText } from "@/hooks/useLanguage";
+import { useHomeData } from "@/hooks/useConvexData";
 import { SearchBar, CategoryCard } from "@/components/ui";
-import { featuredDestinations, mockLodging, mockFood, mockEvents } from "@/constants/mockData";
+import type { Food, Lodging, Event } from "@/types";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const { width } = Dimensions.get("window");
@@ -42,7 +43,8 @@ export function HomeScreenContent({ onNavigateToTab }: HomeScreenContentProps) {
 
   const onRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
+    // Simulated refresh - data is local only now
+    setTimeout(() => setRefreshing(false), 500);
   };
 
   const categoryCards = [
@@ -72,8 +74,16 @@ export function HomeScreenContent({ onNavigateToTab }: HomeScreenContentProps) {
     },
   ];
 
-  const featuredItems = featuredDestinations.filter((d) => d.featured);
-  const moreDestinations = featuredDestinations.filter((d) => !d.featured);
+  // Get data from Convex with fallback to mock data
+  const { lodgings, foods, events, destinations } = useHomeData();
+
+  const featuredItems = destinations.filter((d) => d.featured);
+  const moreDestinations = destinations.filter((d) => !d.featured);
+
+  // Use Convex data (with mock fallback)
+  const allLodging = lodgings;
+  const allFood = foods;
+  const allEvents = events;
 
   // Search functionality
   const searchResults = useMemo(() => {
@@ -81,28 +91,28 @@ export function HomeScreenContent({ onNavigateToTab }: HomeScreenContentProps) {
 
     const query = searchQuery.toLowerCase();
 
-    const lodgingResults = mockLodging.filter((item) =>
+    const lodgingResults = allLodging.filter((item) =>
       item.name.toLowerCase().includes(query) ||
       item.nameAr.includes(query) ||
       item.city.toLowerCase().includes(query) ||
       item.cityAr.includes(query)
     );
 
-    const foodResults = mockFood.filter((item) =>
+    const foodResults = allFood.filter((item) =>
       item.name.toLowerCase().includes(query) ||
       item.nameAr.includes(query) ||
       item.cuisine.toLowerCase().includes(query) ||
       item.cuisineAr.includes(query)
     );
 
-    const eventResults = mockEvents.filter((item) =>
+    const eventResults = allEvents.filter((item) =>
       item.title.toLowerCase().includes(query) ||
       item.titleAr.includes(query) ||
       item.location.toLowerCase().includes(query) ||
       item.locationAr.includes(query)
     );
 
-    const destinationResults = featuredDestinations.filter((item) =>
+    const destinationResults = destinations.filter((item) =>
       item.name.toLowerCase().includes(query) ||
       item.nameAr.includes(query) ||
       item.subtitle.toLowerCase().includes(query) ||
@@ -116,7 +126,7 @@ export function HomeScreenContent({ onNavigateToTab }: HomeScreenContentProps) {
       destinations: destinationResults,
       total: lodgingResults.length + foodResults.length + eventResults.length + destinationResults.length,
     };
-  }, [searchQuery]);
+  }, [searchQuery, allLodging, allFood, allEvents]);
 
   const handleScroll = (event: any) => {
     scrollY.value = event.nativeEvent.contentOffset.y;

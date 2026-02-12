@@ -5,14 +5,15 @@ import {
   StyleSheet,
   FlatList,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useLanguage } from "@/hooks/useLanguage";
+import { useEvents } from "@/hooks/useConvexData";
 import { FilterChip } from "@/components/ui";
 import { EventCard } from "@/components/events/EventCard";
-import { mockEvents } from "@/constants/mockData";
-import type { EventFilter } from "@/types";
+import type { EventFilter, EventCategory } from "@/types";
 
 const filters: { key: EventFilter; labelKey: "all" | "festivals" | "conferences" | "outdoor" | "indoor" | "seasonal" }[] = [
   { key: "all", labelKey: "all" },
@@ -28,10 +29,15 @@ export function EventsScreenContent() {
   const { t, language, isRTL } = useLanguage();
   const [activeFilter, setActiveFilter] = useState<EventFilter>("all");
 
+  // Get events from Convex with fallback to mock data
+  const categoryFilter = activeFilter === "all" ? undefined : activeFilter as EventCategory;
+  const { events, isLoading } = useEvents(categoryFilter);
+
+  // Filter locally if using "all" filter
   const filteredEvents = useMemo(() => {
-    if (activeFilter === "all") return mockEvents;
-    return mockEvents.filter((item) => item.category === activeFilter);
-  }, [activeFilter]);
+    if (activeFilter === "all") return events;
+    return events.filter((item) => item.category === activeFilter);
+  }, [activeFilter, events]);
 
   const displayFilters = isRTL ? [...filters].reverse() : filters;
 
@@ -69,31 +75,37 @@ export function EventsScreenContent() {
       </Animated.View>
 
       {/* Events List */}
-      <FlatList
-        data={filteredEvents}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
-          <Animated.View entering={FadeInDown.delay(300 + index * 100).duration(600)}>
-            <EventCard
-              event={item}
-              language={language}
-              isRTL={isRTL}
-            />
-          </Animated.View>
-        )}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyTitle, isRTL && styles.textRTL]}>
-              {t("emptyEventsTitle")}
-            </Text>
-            <Text style={[styles.emptyMessage, isRTL && styles.textRTL]}>
-              {t("emptyEventsMessage")}
-            </Text>
-          </View>
-        }
-      />
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0D7A5F" />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredEvents}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item, index }) => (
+            <Animated.View entering={FadeInDown.delay(300 + index * 100).duration(600)}>
+              <EventCard
+                event={item}
+                language={language}
+                isRTL={isRTL}
+              />
+            </Animated.View>
+          )}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyTitle, isRTL && styles.textRTL]}>
+                {t("emptyEventsTitle")}
+              </Text>
+              <Text style={[styles.emptyMessage, isRTL && styles.textRTL]}>
+                {t("emptyEventsMessage")}
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
@@ -147,5 +159,11 @@ const styles = StyleSheet.create({
   emptyMessage: {
     fontSize: 14,
     color: "#737373",
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 60,
   },
 });

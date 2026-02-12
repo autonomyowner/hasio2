@@ -9,7 +9,9 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -20,6 +22,9 @@ import Animated, {
   cancelAnimation,
 } from "react-native-reanimated";
 import { voiceService, VoiceState } from "../../lib/voiceService";
+
+const VOICE_CONSENT_KEY = "hasio_voice_data_consent";
+const PRIVACY_POLICY_URL = "https://hasio.xyz/privacy-policy.html";
 
 interface VoiceAssistantProps {
   isRTL: boolean;
@@ -32,6 +37,11 @@ interface VoiceAssistantProps {
     tapToStop: string;
     voiceAssistant: string;
     close: string;
+    voiceDataConsentTitle: string;
+    voiceDataConsentMessage: string;
+    voiceDataConsentLearnMore: string;
+    voiceDataConsentAccept: string;
+    voiceDataConsentDecline: string;
   };
   onTranscript?: (text: string, isUser: boolean) => void;
 }
@@ -55,6 +65,8 @@ export function VoiceAssistant({
   const [isHolding, setIsHolding] = useState(false);
   const [textInput, setTextInput] = useState("");
   const scrollViewRef = useRef<ScrollView>(null);
+  const [hasVoiceConsent, setHasVoiceConsent] = useState<boolean | null>(null);
+  const [showConsentModal, setShowConsentModal] = useState(false);
 
   const buttonScale = useSharedValue(1);
   const pulseScale = useSharedValue(1);
@@ -62,6 +74,20 @@ export function VoiceAssistant({
   const waveScale1 = useSharedValue(1);
   const waveScale2 = useSharedValue(1);
   const waveScale3 = useSharedValue(1);
+
+  // Check for existing voice consent on mount
+  useEffect(() => {
+    const checkConsent = async () => {
+      try {
+        const consent = await AsyncStorage.getItem(VOICE_CONSENT_KEY);
+        setHasVoiceConsent(consent === "true");
+      } catch (error) {
+        console.error("Error checking voice consent:", error);
+        setHasVoiceConsent(false);
+      }
+    };
+    checkConsent();
+  }, []);
 
   // Initialize voice service when modal opens
   useEffect(() => {
@@ -174,9 +200,41 @@ export function VoiceAssistant({
   }, [voiceState]);
 
   const handleOpenModal = () => {
+    // Check if user has consented to voice data processing
+    if (!hasVoiceConsent) {
+      setShowConsentModal(true);
+      return;
+    }
+    openVoiceModal();
+  };
+
+  const openVoiceModal = () => {
     setIsModalVisible(true);
     setMessages([]);
     setError(null);
+  };
+
+  const handleAcceptConsent = async () => {
+    try {
+      await AsyncStorage.setItem(VOICE_CONSENT_KEY, "true");
+      setHasVoiceConsent(true);
+      setShowConsentModal(false);
+      openVoiceModal();
+    } catch (error) {
+      console.error("Error saving voice consent:", error);
+    }
+  };
+
+  const handleDeclineConsent = () => {
+    setShowConsentModal(false);
+  };
+
+  const handleOpenPrivacyPolicy = async () => {
+    try {
+      await Linking.openURL(PRIVACY_POLICY_URL);
+    } catch (error) {
+      console.error("Failed to open privacy policy:", error);
+    }
   };
 
   const handleCloseModal = async () => {
@@ -460,6 +518,49 @@ export function VoiceAssistant({
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Voice Data Consent Modal */}
+      <Modal
+        visible={showConsentModal}
+        animationType="fade"
+        transparent
+        onRequestClose={handleDeclineConsent}
+      >
+        <View style={styles.consentModalOverlay}>
+          <View style={styles.consentModalContent}>
+            <Text style={[styles.consentTitle, isRTL && styles.textRTL]}>
+              {translations.voiceDataConsentTitle}
+            </Text>
+            <Text style={[styles.consentMessage, isRTL && styles.textRTL]}>
+              {translations.voiceDataConsentMessage}
+            </Text>
+
+            <Pressable onPress={handleOpenPrivacyPolicy} style={styles.learnMoreButton}>
+              <Text style={[styles.learnMoreText, isRTL && styles.textRTL]}>
+                {translations.voiceDataConsentLearnMore}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.acceptButton}
+              onPress={handleAcceptConsent}
+            >
+              <Text style={styles.acceptButtonText}>
+                {translations.voiceDataConsentAccept}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.declineButton}
+              onPress={handleDeclineConsent}
+            >
+              <Text style={styles.declineButtonText}>
+                {translations.voiceDataConsentDecline}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -715,5 +816,72 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+  },
+  // Consent Modal Styles
+  consentModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  consentModalContent: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    width: "100%",
+    maxWidth: 340,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  consentTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  consentMessage: {
+    fontSize: 15,
+    color: "#525252",
+    lineHeight: 22,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  learnMoreButton: {
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  learnMoreText: {
+    fontSize: 14,
+    color: "#0D7A5F",
+    fontWeight: "500",
+    textDecorationLine: "underline",
+  },
+  acceptButton: {
+    backgroundColor: "#0D7A5F",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  acceptButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  declineButton: {
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  declineButtonText: {
+    color: "#737373",
+    fontSize: 15,
+    fontWeight: "500",
   },
 });

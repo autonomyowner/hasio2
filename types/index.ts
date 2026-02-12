@@ -2,7 +2,7 @@
 export type Language = "en" | "ar";
 
 // User Types
-export type UserType = "user" | "business" | "provider";
+export type UserType = "user" | "business" | "provider" | "admin";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
 // Service Types

@@ -5,14 +5,15 @@ import {
   StyleSheet,
   FlatList,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useLanguage } from "@/hooks/useLanguage";
+import { useFoods } from "@/hooks/useConvexData";
 import { FilterChip } from "@/components/ui";
 import { FoodCard } from "@/components/food/FoodCard";
-import { mockFood } from "@/constants/mockData";
-import type { FoodFilter } from "@/types";
+import type { FoodFilter, FoodCategory } from "@/types";
 
 const filters: { key: FoodFilter; labelKey: "all" | "restaurants" | "productiveFamilies" | "fastFood" | "drinks" }[] = [
   { key: "all", labelKey: "all" },
@@ -27,10 +28,15 @@ export function FoodScreenContent() {
   const { t, language, isRTL } = useLanguage();
   const [activeFilter, setActiveFilter] = useState<FoodFilter>("all");
 
+  // Get foods from Convex with fallback to mock data
+  const categoryFilter = activeFilter === "all" ? undefined : activeFilter as FoodCategory;
+  const { foods, isLoading } = useFoods(categoryFilter);
+
+  // Filter locally if using "all" filter
   const filteredFood = useMemo(() => {
-    if (activeFilter === "all") return mockFood;
-    return mockFood.filter((item) => item.category === activeFilter);
-  }, [activeFilter]);
+    if (activeFilter === "all") return foods;
+    return foods.filter((item) => item.category === activeFilter);
+  }, [activeFilter, foods]);
 
   const displayFilters = isRTL ? [...filters].reverse() : filters;
 
@@ -68,32 +74,38 @@ export function FoodScreenContent() {
       </Animated.View>
 
       {/* Food List */}
-      <FlatList
-        data={filteredFood}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
-          <Animated.View entering={FadeInDown.delay(300 + index * 100).duration(600)}>
-            <FoodCard
-              food={item}
-              language={language}
-              isRTL={isRTL}
-              avgPriceText={t("averagePrice")}
-            />
-          </Animated.View>
-        )}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyTitle, isRTL && styles.textRTL]}>
-              {t("emptyFoodTitle")}
-            </Text>
-            <Text style={[styles.emptyMessage, isRTL && styles.textRTL]}>
-              {t("emptyFoodMessage")}
-            </Text>
-          </View>
-        }
-      />
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0D7A5F" />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredFood}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item, index }) => (
+            <Animated.View entering={FadeInDown.delay(300 + index * 100).duration(600)}>
+              <FoodCard
+                food={item}
+                language={language}
+                isRTL={isRTL}
+                avgPriceText={t("averagePrice")}
+              />
+            </Animated.View>
+          )}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyTitle, isRTL && styles.textRTL]}>
+                {t("emptyFoodTitle")}
+              </Text>
+              <Text style={[styles.emptyMessage, isRTL && styles.textRTL]}>
+                {t("emptyFoodMessage")}
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
@@ -147,5 +159,11 @@ const styles = StyleSheet.create({
   emptyMessage: {
     fontSize: 14,
     color: "#737373",
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 60,
   },
 });

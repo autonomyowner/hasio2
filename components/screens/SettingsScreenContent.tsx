@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Switch,
   Modal,
   Alert,
+  Linking,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -17,11 +19,17 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import { useMutation } from "convex/react";
+import { authClient } from "@/lib/authClient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { api } from "@/convex/_generated/api";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAppStore } from "@/stores/appStore";
-import { useAuthStore } from "@/stores/authStore";
-import { getProfile, upgradeUserType } from "@/lib/auth";
-import { Profile, UserType } from "@/types";
+import { useMomentsStore } from "@/stores/momentsStore";
+import { useConvexUser } from "@/hooks/useConvexUser";
+import { UserType } from "@/types";
+
+const PRIVACY_POLICY_URL = "https://hasio.xyz/privacy-policy.html";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -29,54 +37,96 @@ export function SettingsScreenContent() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t, language, changeLanguage, isRTL } = useLanguage();
+  const signOut = async () => {
+    await authClient.signOut();
+  };
 
   const isDarkMode = useAppStore((state) => state.isDarkMode);
   const toggleDarkMode = useAppStore((state) => state.toggleDarkMode);
   const notificationsEnabled = useAppStore((state) => state.notificationsEnabled);
   const toggleNotifications = useAppStore((state) => state.toggleNotifications);
   const setOnboardingComplete = useAppStore((state) => state.setOnboardingComplete);
+  const clearUserData = useAppStore((state) => state.clearUserData);
+  const clearMoments = useMomentsStore((state) => state.clearMoments);
 
-  const user = useAuthStore((state) => state.user);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  // Use Convex user data
+  const { user, userType, isBusinessOwner, isServiceProvider, isAdmin } = useConvexUser();
+
+  // Convex mutations
+  const upgradeUserTypeMutation = useMutation(api.users.upgradeUserType);
+  const deleteUserMutation = useMutation(api.users.deleteUser);
+
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    if (user?.id) {
-      fetchProfile();
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      setOnboardingComplete(false);
+      router.replace("/onboarding");
+    } catch (error) {
+      console.error("Sign out error:", error);
+      Alert.alert(t("error"), "Failed to sign out");
     }
-  }, [user?.id]);
-
-  const fetchProfile = async () => {
-    if (!user?.id) return;
-    const { profile: fetchedProfile } = await getProfile(user.id);
-    setProfile(fetchedProfile);
   };
 
-  const handleSignOut = () => {
-    setOnboardingComplete(false);
-    router.replace("/onboarding");
+  const handleOpenPrivacyPolicy = async () => {
+    try {
+      await Linking.openURL(PRIVACY_POLICY_URL);
+    } catch (error) {
+      console.error("Failed to open privacy policy:", error);
+      Alert.alert(t("error"), "Could not open privacy policy");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true);
+    try {
+      // Delete from Convex database
+      await deleteUserMutation();
+
+      // Clear ALL local storage data
+      clearUserData();           // Clear appStore (favorites, dayPlans, chatMessages)
+      clearMoments();            // Clear momentsStore
+
+      // Clear voice consent and any other AsyncStorage keys
+      await AsyncStorage.removeItem("hasio_voice_data_consent");
+
+      // Sign out from Clerk
+      await signOut();
+      setShowDeleteModal(false);
+      router.replace("/onboarding");
+    } catch (error: any) {
+      console.error("Delete account error:", error);
+      Alert.alert(t("deleteAccountError"), error?.message || "Unknown error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const confirmDeleteAccount = () => {
+    setShowDeleteModal(true);
   };
 
   const handleUpgrade = async (newType: "business" | "provider") => {
-    if (!user?.id) return;
-
     setIsUpgrading(true);
-    const { success, error } = await upgradeUserType(user.id, newType);
-    setIsUpgrading(false);
-
-    if (success) {
+    try {
+      await upgradeUserTypeMutation({ userType: newType });
       Alert.alert(t("upgradeSuccess"), "", [
         {
           text: "OK",
           onPress: () => {
             setShowUpgradeModal(false);
-            fetchProfile();
           },
         },
       ]);
-    } else {
-      Alert.alert(t("upgradeError"), error || "Unknown error");
+    } catch (error: any) {
+      console.error("Upgrade error:", error);
+      Alert.alert(t("upgradeError"), error?.message || "Unknown error");
+    } finally {
+      setIsUpgrading(false);
     }
   };
 
@@ -86,6 +136,8 @@ export function SettingsScreenContent() {
         return t("userTypeBusiness");
       case "provider":
         return t("userTypeProvider");
+      case "admin":
+        return t("admin") || "Admin";
       default:
         return t("userTypeUser");
     }
@@ -145,7 +197,7 @@ export function SettingsScreenContent() {
           />
 
           {/* Dashboard link for business users */}
-          {profile?.user_type === "business" && (
+          {isBusinessOwner && (
             <SettingRow
               label={t("businessDashboard")}
               subtitle={t("manageListings")}
@@ -155,7 +207,7 @@ export function SettingsScreenContent() {
           )}
 
           {/* Dashboard link for provider users */}
-          {profile?.user_type === "provider" && (
+          {isServiceProvider && (
             <SettingRow
               label={t("providerDashboard")}
               subtitle={t("manageServices")}
@@ -164,8 +216,18 @@ export function SettingsScreenContent() {
             />
           )}
 
+          {/* Admin dashboard link */}
+          {isAdmin && (
+            <SettingRow
+              label={t("adminDashboard") || "Admin Dashboard"}
+              subtitle={t("manageContent") || "Manage content and users"}
+              isRTL={isRTL}
+              onPress={() => router.push("/admin/dashboard")}
+            />
+          )}
+
           {/* Upgrade option for normal users */}
-          {profile?.user_type === "user" && (
+          {userType === "user" && (
             <SettingRow
               label={t("upgradeAccount")}
               subtitle={t("becomeBusinessOrProvider")}
@@ -181,9 +243,18 @@ export function SettingsScreenContent() {
           />
 
           <SettingRow
-            label={t("privacySecurity")}
-            subtitle={t("manageData")}
+            label={t("privacyPolicy")}
+            subtitle={t("privacyPolicySubtitle")}
             isRTL={isRTL}
+            onPress={handleOpenPrivacyPolicy}
+          />
+
+          <SettingRow
+            label={t("deleteAccount")}
+            subtitle={t("deleteAccountSubtitle")}
+            isRTL={isRTL}
+            onPress={confirmDeleteAccount}
+            destructive
           />
 
           <SettingRow
@@ -278,6 +349,45 @@ export function SettingsScreenContent() {
             <Pressable
               style={styles.cancelButton}
               onPress={() => setShowUpgradeModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>{t("cancel")}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Account Modal */}
+      <Modal
+        visible={showDeleteModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => !isDeleting && setShowDeleteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={[styles.modalTitle, isRTL && styles.textRTL, styles.destructiveText]}>
+              {t("deleteAccountConfirmTitle")}
+            </Text>
+            <Text style={[styles.modalSubtitle, isRTL && styles.textRTL]}>
+              {t("deleteAccountConfirmMessage")}
+            </Text>
+
+            <Pressable
+              style={[styles.deleteButton, isDeleting && styles.deleteButtonDisabled]}
+              onPress={handleDeleteAccount}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.deleteButtonText}>{t("deleteAccount")}</Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              style={styles.cancelButton}
+              onPress={() => setShowDeleteModal(false)}
+              disabled={isDeleting}
             >
               <Text style={styles.cancelButtonText}>{t("cancel")}</Text>
             </Pressable>
@@ -531,5 +641,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#737373",
     fontWeight: "500",
+  },
+  deleteButton: {
+    backgroundColor: "#DC6B5A",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  deleteButtonDisabled: {
+    opacity: 0.6,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
 });

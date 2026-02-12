@@ -507,6 +507,21 @@ class VoiceService {
       this.callbacks?.onStateChange('idle');
     }
   }
+
+  // Get AI response for text chat without voice output
+  async getTextChatResponse(userMessage: string): Promise<string> {
+    try {
+      return await this.getAIResponse(userMessage);
+    } catch (error) {
+      console.error('Error getting text chat response:', error);
+      return this.getFallbackResponse(userMessage);
+    }
+  }
+
+  // Initialize without callbacks for text-only mode
+  initializeTextMode() {
+    this.conversationHistory = [];
+  }
 }
 
 export const voiceService = new VoiceService();

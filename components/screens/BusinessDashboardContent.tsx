@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -15,64 +15,38 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { useLanguage } from "@/hooks/useLanguage";
-import { useAuthStore } from "@/stores/authStore";
-import { supabase } from "@/lib/supabase";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-interface ListingStats {
-  total: number;
-  pending: number;
-  approved: number;
-}
 
 export default function BusinessDashboardContent() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t, isRTL } = useLanguage();
-  const user = useAuthStore((state) => state.user);
 
-  const [stats, setStats] = useState<ListingStats>({
-    total: 0,
-    pending: 0,
-    approved: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
+  // Fetch real stats from Convex
+  const lodgings = useQuery(api.lodgings.byOwner);
+  const foods = useQuery(api.foods.byOwner);
+  const events = useQuery(api.events.byOwner);
+  const destinations = useQuery(api.destinations.byOwner);
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
+  const isLoading = lodgings === undefined || foods === undefined ||
+                    events === undefined || destinations === undefined;
 
-  const fetchStats = async () => {
-    if (!user?.id) return;
+  // Calculate stats
+  const allListings = [
+    ...(lodgings || []),
+    ...(foods || []),
+    ...(events || []),
+    ...(destinations || []),
+  ];
 
-    try {
-      // Fetch counts from all content tables
-      const [lodgingRes, foodRes, eventsRes, destinationsRes] = await Promise.all([
-        supabase.from("lodging").select("status", { count: "exact" }).eq("owner_id", user.id),
-        supabase.from("food").select("status", { count: "exact" }).eq("owner_id", user.id),
-        supabase.from("events").select("status", { count: "exact" }).eq("owner_id", user.id),
-        supabase.from("destinations").select("status", { count: "exact" }).eq("owner_id", user.id),
-      ]);
-
-      const allItems = [
-        ...(lodgingRes.data || []),
-        ...(foodRes.data || []),
-        ...(eventsRes.data || []),
-        ...(destinationsRes.data || []),
-      ];
-
-      const total = allItems.length;
-      const pending = allItems.filter((item) => item.status === "pending").length;
-      const approved = allItems.filter((item) => item.status === "approved").length;
-
-      setStats({ total, pending, approved });
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    } finally {
-      setIsLoading(false);
-    }
+  const stats = {
+    total: allListings.length,
+    pending: allListings.filter(item => item.status === 'pending').length,
+    approved: allListings.filter(item => item.status === 'approved').length,
   };
 
   const quickActions = [
@@ -104,7 +78,9 @@ export default function BusinessDashboardContent() {
           style={styles.statsContainer}
         >
           {isLoading ? (
-            <ActivityIndicator size="small" color="#0D7A5F" />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#0D7A5F" />
+            </View>
           ) : (
             <View style={[styles.statsRow, isRTL && styles.statsRowRTL]}>
               <StatCard
@@ -129,22 +105,20 @@ export default function BusinessDashboardContent() {
           )}
         </Animated.View>
 
-        {/* First listing note */}
-        {stats.total === 0 && !isLoading && (
-          <Animated.View
-            entering={FadeInDown.delay(250).duration(600)}
-            style={styles.noteContainer}
-          >
-            <Text style={[styles.noteText, isRTL && styles.textRTL]}>
-              {t("firstListingNote")}
-            </Text>
-          </Animated.View>
-        )}
+        {/* Admin approval note */}
+        <Animated.View
+          entering={FadeInDown.delay(250).duration(600)}
+          style={styles.noteContainer}
+        >
+          <Text style={[styles.noteText, isRTL && styles.textRTL]}>
+            {t("firstListingNote")}
+          </Text>
+        </Animated.View>
 
         {/* Quick Actions */}
         <Animated.View entering={FadeInDown.delay(300).duration(600)}>
           <Text style={[styles.sectionTitle, isRTL && styles.sectionTitleRTL]}>
-            {t("addImages")}
+            {t("addNew")}
           </Text>
 
           <View style={styles.actionsGrid}>
@@ -262,6 +236,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 20,
   },
+  loadingContainer: {
+    padding: 20,
+    alignItems: "center",
+  },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -294,14 +272,14 @@ const styles = StyleSheet.create({
   },
   noteContainer: {
     marginHorizontal: 24,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: "#DBEAFE",
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
   },
   noteText: {
     fontSize: 14,
-    color: "#92400E",
+    color: "#1E40AF",
     textAlign: "center",
   },
   sectionTitle: {

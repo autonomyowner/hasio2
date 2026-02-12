@@ -14,9 +14,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { useLanguage } from "@/hooks/useLanguage";
-import { useAuthStore } from "@/stores/authStore";
-import { supabase } from "@/lib/supabase";
+import { useConvexUser } from "@/hooks/useConvexUser";
+import { uploadMultipleToR2 } from "@/lib/r2Upload";
 import { Button } from "@/components/ui";
 import { DestinationCategory } from "@/types";
 
@@ -31,7 +33,8 @@ const DESTINATION_CATEGORIES: { value: DestinationCategory; labelKey: string }[]
 export default function PostDestinationScreen() {
   const router = useRouter();
   const { t, isRTL } = useLanguage();
-  const user = useAuthStore((state) => state.user);
+  const { isSignedIn, isBusinessOwner } = useConvexUser();
+  const createDestination = useMutation(api.destinations.create);
 
   const [isLoading, setIsLoading] = useState(false);
   const [name, setName] = useState("");
@@ -62,71 +65,51 @@ export default function PostDestinationScreen() {
     setImages(images.filter((_, i) => i !== index));
   };
 
-  const uploadImages = async (): Promise<string[]> => {
-    const uploadedUrls: string[] = [];
-
-    for (const imageUri of images) {
-      const fileName = `${user?.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-
-      const { data, error } = await supabase.storage
-        .from("content")
-        .upload(fileName, blob, { contentType: "image/jpeg" });
-
-      if (error) throw error;
-
-      const { data: urlData } = supabase.storage
-        .from("content")
-        .getPublicUrl(data.path);
-
-      uploadedUrls.push(urlData.publicUrl);
-    }
-
-    return uploadedUrls;
-  };
-
   const handleSubmit = async () => {
-    if (!name.trim() || !nameAr.trim() || !city.trim() || !cityAr.trim()) {
-      Alert.alert(t("error"), "Please fill in all required fields");
+    if (!name.trim() || !nameAr.trim()) {
+      Alert.alert(t("error"), t("fillRequiredFields"));
       return;
     }
 
-    if (!user?.id) {
-      Alert.alert(t("error"), "You must be logged in");
+    if (!isSignedIn) {
+      Alert.alert(t("error"), t("pleaseSignIn"));
+      return;
+    }
+
+    if (!isBusinessOwner) {
+      Alert.alert(t("error"), t("businessAccountRequired"));
       return;
     }
 
     setIsLoading(true);
 
     try {
-      let imageUrls: string[] = [];
-      if (images.length > 0) {
-        imageUrls = await uploadImages();
-      }
+      const uploadedImages = await uploadMultipleToR2(images, "destinations");
 
-      const { error } = await supabase.from("destinations").insert({
-        owner_id: user.id,
+      await createDestination({
         name: name.trim(),
-        name_ar: nameAr.trim(),
+        nameAr: nameAr.trim(),
         category,
-        city: city.trim(),
-        city_ar: cityAr.trim(),
-        address: address.trim() || null,
-        address_ar: addressAr.trim() || null,
-        description: description.trim() || null,
-        description_ar: descriptionAr.trim() || null,
-        images: imageUrls,
+        city: city.trim() || undefined,
+        cityAr: cityAr.trim() || undefined,
+        address: address.trim() || undefined,
+        addressAr: addressAr.trim() || undefined,
+        images: uploadedImages,
+        description: description.trim() || undefined,
+        descriptionAr: descriptionAr.trim() || undefined,
       });
 
-      if (error) throw error;
-
-      Alert.alert(t("statusPending"), t("awaitingReview"), [
-        { text: "OK", onPress: () => router.back() },
-      ]);
-    } catch (error: any) {
-      Alert.alert(t("error"), error.message);
+      Alert.alert(
+        t("success"),
+        t("listingSubmittedForReview"),
+        [{ text: "OK", onPress: () => router.back() }]
+      );
+    } catch (error) {
+      console.error("Error creating destination:", error);
+      Alert.alert(
+        t("error"),
+        error instanceof Error ? error.message : t("somethingWentWrong")
+      );
     } finally {
       setIsLoading(false);
     }

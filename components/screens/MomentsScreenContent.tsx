@@ -9,8 +9,11 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Image,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import Animated, {
   FadeInDown,
@@ -18,8 +21,10 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { useLanguage } from "@/hooks/useLanguage";
-import { useAuthStore } from "@/stores/authStore";
+import { useConvexUser } from "@/hooks/useConvexUser";
 import { useMomentsStore } from "@/stores/momentsStore";
 import { MomentCard } from "@/components/moments/MomentCard";
 import { Button } from "@/components/ui";
@@ -29,9 +34,344 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function MomentsScreenContent() {
   const insets = useSafeAreaInsets();
-  const { t, isRTL } = useLanguage();
+  const { t, isRTL, language } = useLanguage();
+  const router = useRouter();
 
-  const { user } = useAuthStore();
+  const { isSignedIn, isLoaded, userType, isBusinessOwner, isServiceProvider } = useConvexUser();
+
+  // Show loading while checking auth
+  if (!isLoaded) {
+    return (
+      <View style={[styles.container, styles.loadingState, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color="#0D7A5F" />
+      </View>
+    );
+  }
+
+  // Show auth prompt if not logged in
+  if (!isSignedIn) {
+    return <AuthPrompt />;
+  }
+
+  // Render different content based on user type
+  if (isBusinessOwner) {
+    return <BusinessListingsView insets={insets} t={t} isRTL={isRTL} language={language} router={router} />;
+  }
+
+  if (isServiceProvider) {
+    return <ProviderServicesView insets={insets} t={t} isRTL={isRTL} language={language} router={router} />;
+  }
+
+  // Regular user - show personal moments
+  return <UserMomentsView insets={insets} t={t} isRTL={isRTL} />;
+}
+
+// ============================================
+// BUSINESS OWNER VIEW - Show their listings
+// ============================================
+interface BusinessListingsViewProps {
+  insets: any;
+  t: (key: string) => string;
+  isRTL: boolean;
+  language: string;
+  router: any;
+}
+
+function BusinessListingsView({ insets, t, isRTL, language, router }: BusinessListingsViewProps) {
+  const lodgings = useQuery(api.lodgings.byOwner);
+  const foods = useQuery(api.foods.byOwner);
+  const events = useQuery(api.events.byOwner);
+  const destinations = useQuery(api.destinations.byOwner);
+
+  const isLoading = lodgings === undefined || foods === undefined ||
+                    events === undefined || destinations === undefined;
+
+  const allListings = [
+    ...(lodgings || []).map(item => ({ ...item, _type: 'lodging' as const })),
+    ...(foods || []).map(item => ({ ...item, _type: 'food' as const })),
+    ...(events || []).map(item => ({ ...item, _type: 'event' as const })),
+    ...(destinations || []).map(item => ({ ...item, _type: 'destination' as const })),
+  ];
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved': return '#0D7A5F';
+      case 'pending': return '#F59E0B';
+      case 'rejected': return '#DC2626';
+      default: return '#737373';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'approved': return t('approved') || 'Approved';
+      case 'pending': return t('pending') || 'Pending';
+      case 'rejected': return t('rejected') || 'Rejected';
+      default: return status;
+    }
+  };
+
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'lodging': return t('lodging') || 'Lodging';
+      case 'food': return t('food') || 'Food';
+      case 'event': return t('event') || 'Event';
+      case 'destination': return t('destination') || 'Destination';
+      default: return type;
+    }
+  };
+
+  const getName = (item: any) => {
+    if (item._type === 'event') {
+      return language === 'ar' ? item.titleAr : item.title;
+    }
+    return language === 'ar' ? item.nameAr : item.name;
+  };
+
+  const renderItem = ({ item, index }: { item: any; index: number }) => (
+    <Animated.View
+      entering={FadeInDown.delay(index * 50).duration(400)}
+      style={styles.listingCard}
+    >
+      {item.images && item.images[0] && (
+        <Image source={{ uri: item.images[0] }} style={styles.listingImage} />
+      )}
+      <View style={[styles.listingInfo, isRTL && styles.listingInfoRTL]}>
+        <View style={styles.listingHeader}>
+          <Text style={[styles.listingName, isRTL && styles.textRTL]} numberOfLines={1}>
+            {getName(item)}
+          </Text>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+              {getStatusLabel(item.status)}
+            </Text>
+          </View>
+        </View>
+        <Text style={[styles.listingType, isRTL && styles.textRTL]}>
+          {getTypeLabel(item._type)}
+        </Text>
+      </View>
+    </Animated.View>
+  );
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <Animated.View
+        entering={FadeInDown.delay(100).duration(600)}
+        style={[styles.header, isRTL && styles.headerRTL]}
+      >
+        <Text style={[styles.title, isRTL && styles.textRTL]}>
+          {t('myListings') || 'My Listings'}
+        </Text>
+        <AddButton
+          label={t('addNew') || 'Add New'}
+          onPress={() => router.push('/business/dashboard')}
+        />
+      </Animated.View>
+
+      {/* Stats */}
+      <Animated.View
+        entering={FadeInDown.delay(150).duration(600)}
+        style={styles.statsRow}
+      >
+        <StatBox label={t('lodging') || 'Lodging'} count={lodgings?.length || 0} />
+        <StatBox label={t('food') || 'Food'} count={foods?.length || 0} />
+        <StatBox label={t('events') || 'Events'} count={events?.length || 0} />
+        <StatBox label={t('destinations') || 'Places'} count={destinations?.length || 0} />
+      </Animated.View>
+
+      {/* Listings */}
+      {isLoading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color="#0D7A5F" />
+        </View>
+      ) : allListings.length > 0 ? (
+        <FlatList
+          data={allListings}
+          keyExtractor={(item) => `${item._type}-${item._id}`}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyTitle, isRTL && styles.textRTL]}>
+            {t('noListingsYet') || 'No listings yet'}
+          </Text>
+          <Text style={[styles.emptyMessage, isRTL && styles.textRTL]}>
+            {t('startAddingListings') || 'Start adding your lodgings, restaurants, and events'}
+          </Text>
+          <Button
+            title={t('goToDashboard') || 'Go to Dashboard'}
+            onPress={() => router.push('/business/dashboard')}
+            style={styles.emptyButton}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ============================================
+// SERVICE PROVIDER VIEW - Show their services
+// ============================================
+interface ProviderServicesViewProps {
+  insets: any;
+  t: (key: string) => string;
+  isRTL: boolean;
+  language: string;
+  router: any;
+}
+
+function ProviderServicesView({ insets, t, isRTL, language, router }: ProviderServicesViewProps) {
+  const services = useQuery(api.services.byOwner);
+  const isLoading = services === undefined;
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved': return '#0D7A5F';
+      case 'pending': return '#F59E0B';
+      case 'rejected': return '#DC2626';
+      default: return '#737373';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'approved': return t('approved') || 'Approved';
+      case 'pending': return t('pending') || 'Pending';
+      case 'rejected': return t('rejected') || 'Rejected';
+      default: return status;
+    }
+  };
+
+  const getServiceTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      tour_guide: t('tourGuide') || 'Tour Guide',
+      photographer: t('photographer') || 'Photographer',
+      driver: t('driver') || 'Driver',
+      translator: t('translator') || 'Translator',
+      event_planner: t('eventPlanner') || 'Event Planner',
+      catering: t('catering') || 'Catering',
+      equipment_rental: t('equipmentRental') || 'Equipment Rental',
+      other: t('other') || 'Other',
+    };
+    return labels[type] || type;
+  };
+
+  const renderItem = ({ item, index }: { item: any; index: number }) => (
+    <Animated.View
+      entering={FadeInDown.delay(index * 50).duration(400)}
+      style={styles.listingCard}
+    >
+      {item.images && item.images[0] && (
+        <Image source={{ uri: item.images[0] }} style={styles.listingImage} />
+      )}
+      <View style={[styles.listingInfo, isRTL && styles.listingInfoRTL]}>
+        <View style={styles.listingHeader}>
+          <Text style={[styles.listingName, isRTL && styles.textRTL]} numberOfLines={1}>
+            {language === 'ar' ? item.titleAr : item.title}
+          </Text>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+              {getStatusLabel(item.status)}
+            </Text>
+          </View>
+        </View>
+        <Text style={[styles.listingType, isRTL && styles.textRTL]}>
+          {getServiceTypeLabel(item.serviceType)}
+        </Text>
+        {item.priceRange && (
+          <Text style={[styles.priceText, isRTL && styles.textRTL]}>
+            {item.priceRange}
+          </Text>
+        )}
+      </View>
+    </Animated.View>
+  );
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <Animated.View
+        entering={FadeInDown.delay(100).duration(600)}
+        style={[styles.header, isRTL && styles.headerRTL]}
+      >
+        <Text style={[styles.title, isRTL && styles.textRTL]}>
+          {t('myServices') || 'My Services'}
+        </Text>
+        <AddButton
+          label={t('addService') || 'Add Service'}
+          onPress={() => router.push('/provider/post-service')}
+        />
+      </Animated.View>
+
+      {/* Stats */}
+      <Animated.View
+        entering={FadeInDown.delay(150).duration(600)}
+        style={styles.singleStatRow}
+      >
+        <View style={styles.statBoxLarge}>
+          <Text style={styles.statCount}>{services?.length || 0}</Text>
+          <Text style={styles.statLabel}>{t('totalServices') || 'Total Services'}</Text>
+        </View>
+        <View style={styles.statBoxLarge}>
+          <Text style={styles.statCount}>
+            {services?.filter(s => s.status === 'approved').length || 0}
+          </Text>
+          <Text style={styles.statLabel}>{t('activeServices') || 'Active'}</Text>
+        </View>
+        <View style={styles.statBoxLarge}>
+          <Text style={styles.statCount}>
+            {services?.filter(s => s.status === 'pending').length || 0}
+          </Text>
+          <Text style={styles.statLabel}>{t('pendingApproval') || 'Pending'}</Text>
+        </View>
+      </Animated.View>
+
+      {/* Services List */}
+      {isLoading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color="#0D7A5F" />
+        </View>
+      ) : services && services.length > 0 ? (
+        <FlatList
+          data={services}
+          keyExtractor={(item) => item._id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyTitle, isRTL && styles.textRTL]}>
+            {t('noServicesYet') || 'No services yet'}
+          </Text>
+          <Text style={[styles.emptyMessage, isRTL && styles.textRTL]}>
+            {t('startAddingServices') || 'Start offering your services to travelers'}
+          </Text>
+          <Button
+            title={t('addFirstService') || 'Add Your First Service'}
+            onPress={() => router.push('/provider/post-service')}
+            style={styles.emptyButton}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ============================================
+// REGULAR USER VIEW - Personal Moments
+// ============================================
+interface UserMomentsViewProps {
+  insets: any;
+  t: (key: string) => string;
+  isRTL: boolean;
+}
+
+function UserMomentsView({ insets, t, isRTL }: UserMomentsViewProps) {
   const { moments, isLoading, fetchMoments, addMoment, deleteMoment } = useMomentsStore();
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -40,12 +380,9 @@ export function MomentsScreenContent() {
   const [newMomentLocation, setNewMomentLocation] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Fetch moments when user changes
   useEffect(() => {
-    if (user) {
-      fetchMoments();
-    }
-  }, [user]);
+    fetchMoments();
+  }, []);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -118,11 +455,6 @@ export function MomentsScreenContent() {
       />
     </Animated.View>
   );
-
-  // Show auth prompt if not logged in
-  if (!user) {
-    return <AuthPrompt />;
-  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -234,6 +566,9 @@ export function MomentsScreenContent() {
   );
 }
 
+// ============================================
+// SHARED COMPONENTS
+// ============================================
 interface AddButtonProps {
   label: string;
   onPress: () => void;
@@ -263,6 +598,20 @@ function AddButton({ label, onPress }: AddButtonProps) {
     >
       <Text style={styles.addButtonText}>+ {label}</Text>
     </AnimatedPressable>
+  );
+}
+
+interface StatBoxProps {
+  label: string;
+  count: number;
+}
+
+function StatBox({ label, count }: StatBoxProps) {
+  return (
+    <View style={styles.statBox}>
+      <Text style={styles.statCount}>{count}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
   );
 }
 
@@ -302,16 +651,108 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  // Stats
+  statsRow: {
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    marginBottom: 16,
+    gap: 8,
+  },
+  singleStatRow: {
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    marginBottom: 16,
+    gap: 12,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+  },
+  statBoxLarge: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+  },
+  statCount: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#0D7A5F",
+  },
+  statLabel: {
+    fontSize: 11,
+    color: "#737373",
+    marginTop: 4,
+    textAlign: "center",
+  },
+  // Listings
   listContent: {
     paddingHorizontal: 24,
     paddingBottom: 32,
   },
+  listingCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: "hidden",
+  },
+  listingImage: {
+    width: 80,
+    height: 80,
+  },
+  listingInfo: {
+    flex: 1,
+    padding: 12,
+    justifyContent: "center",
+  },
+  listingInfoRTL: {
+    alignItems: "flex-end",
+  },
+  listingHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  listingName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    flex: 1,
+    marginRight: 8,
+  },
+  listingType: {
+    fontSize: 13,
+    color: "#737373",
+  },
+  priceText: {
+    fontSize: 13,
+    color: "#0D7A5F",
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  // Moments
   row: {
     justifyContent: "space-between",
   },
   cardWrapper: {
     marginBottom: 0,
   },
+  // States
   loadingState: {
     flex: 1,
     alignItems: "center",
@@ -338,6 +779,7 @@ const styles = StyleSheet.create({
   emptyButton: {
     paddingHorizontal: 32,
   },
+  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",

@@ -8,7 +8,7 @@
     "icon": "./assets/IconKitchen-Output/android/play_store_512.png",
     "userInterfaceStyle": "automatic",
     "sdkVersion": "54.0.0",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/IconKitchen-Output/android/play_store_512.png",
       "resizeMode": "contain",
@@ -21,7 +21,8 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Hasio needs access to your microphone to enable voice conversations with the travel assistant.",
         "NSPhotoLibraryUsageDescription": "Hasio needs access to your photos to save and share your travel moments.",
-        "NSCameraUsageDescription": "Hasio needs access to your camera to capture travel moments."
+        "NSCameraUsageDescription": "Hasio needs access to your camera to capture travel moments.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -29,8 +30,8 @@
         "foregroundImage": "./assets/IconKitchen-Output/android/play_store_512.png",
         "backgroundColor": "#F5A623"
       },
-      "package": "app.rork.hasio",
-      "versionCode": 9,
+      "package": "com.hasio.travel",
+      "versionCode": 7,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
@@ -43,7 +44,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/IconKitchen-Output/web/favicon.ico"
+      "favicon": "./assets/IconKitchen-Output/web/icon-192.png"
     },
     "plugins": [
       "expo-router",

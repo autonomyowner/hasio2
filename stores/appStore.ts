@@ -41,6 +41,9 @@ interface AppState {
   // Notifications
   notificationsEnabled: boolean;
   toggleNotifications: () => void;
+
+  // Clear all user data (for account deletion)
+  clearUserData: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -108,6 +111,16 @@ export const useAppStore = create<AppState>()(
       notificationsEnabled: true,
       toggleNotifications: () =>
         set((state) => ({ notificationsEnabled: !state.notificationsEnabled })),
+
+      // Clear all user data (for account deletion)
+      clearUserData: () =>
+        set({
+          favorites: [],
+          moments: [],
+          dayPlans: [],
+          chatMessages: [],
+          hasCompletedOnboarding: false,
+        }),
     }),
     {
       name: "hasio-storage",

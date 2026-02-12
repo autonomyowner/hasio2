@@ -14,9 +14,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { useLanguage } from "@/hooks/useLanguage";
-import { useAuthStore } from "@/stores/authStore";
-import { supabase } from "@/lib/supabase";
+import { useConvexUser } from "@/hooks/useConvexUser";
+import { uploadMultipleToR2 } from "@/lib/r2Upload";
 import { Button } from "@/components/ui";
 import { EventCategory } from "@/types";
 
@@ -31,7 +33,8 @@ const EVENT_CATEGORIES: { value: EventCategory; labelKey: string }[] = [
 export default function PostEventScreen() {
   const router = useRouter();
   const { t, isRTL } = useLanguage();
-  const user = useAuthStore((state) => state.user);
+  const { isSignedIn, isBusinessOwner } = useConvexUser();
+  const createEvent = useMutation(api.events.create);
 
   const [isLoading, setIsLoading] = useState(false);
   const [title, setTitle] = useState("");
@@ -62,71 +65,51 @@ export default function PostEventScreen() {
     setImages(images.filter((_, i) => i !== index));
   };
 
-  const uploadImages = async (): Promise<string[]> => {
-    const uploadedUrls: string[] = [];
-
-    for (const imageUri of images) {
-      const fileName = `${user?.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-
-      const { data, error } = await supabase.storage
-        .from("content")
-        .upload(fileName, blob, { contentType: "image/jpeg" });
-
-      if (error) throw error;
-
-      const { data: urlData } = supabase.storage
-        .from("content")
-        .getPublicUrl(data.path);
-
-      uploadedUrls.push(urlData.publicUrl);
-    }
-
-    return uploadedUrls;
-  };
-
   const handleSubmit = async () => {
-    if (!title.trim() || !titleAr.trim() || !date.trim() || !time.trim()) {
-      Alert.alert(t("error"), "Please fill in all required fields");
+    if (!title.trim() || !titleAr.trim() || !date.trim()) {
+      Alert.alert(t("error"), t("fillRequiredFields"));
       return;
     }
 
-    if (!user?.id) {
-      Alert.alert(t("error"), "You must be logged in");
+    if (!isSignedIn) {
+      Alert.alert(t("error"), t("pleaseSignIn"));
+      return;
+    }
+
+    if (!isBusinessOwner) {
+      Alert.alert(t("error"), t("businessAccountRequired"));
       return;
     }
 
     setIsLoading(true);
 
     try {
-      let imageUrls: string[] = [];
-      if (images.length > 0) {
-        imageUrls = await uploadImages();
-      }
+      const uploadedImages = await uploadMultipleToR2(images, "events");
 
-      const { error } = await supabase.from("events").insert({
-        owner_id: user.id,
+      await createEvent({
         title: title.trim(),
-        title_ar: titleAr.trim(),
+        titleAr: titleAr.trim(),
         category,
-        date,
-        time: time.trim(),
-        location: location.trim(),
-        location_ar: locationAr.trim(),
-        description: description.trim() || null,
-        description_ar: descriptionAr.trim() || null,
-        images: imageUrls,
+        date: date.trim(),
+        time: time.trim() || undefined,
+        location: location.trim() || undefined,
+        locationAr: locationAr.trim() || undefined,
+        images: uploadedImages,
+        description: description.trim() || undefined,
+        descriptionAr: descriptionAr.trim() || undefined,
       });
 
-      if (error) throw error;
-
-      Alert.alert(t("statusPending"), t("awaitingReview"), [
-        { text: "OK", onPress: () => router.back() },
-      ]);
-    } catch (error: any) {
-      Alert.alert(t("error"), error.message);
+      Alert.alert(
+        t("success"),
+        t("listingSubmittedForReview"),
+        [{ text: "OK", onPress: () => router.back() }]
+      );
+    } catch (error) {
+      console.error("Error creating event:", error);
+      Alert.alert(
+        t("error"),
+        error instanceof Error ? error.message : t("somethingWentWrong")
+      );
     } finally {
       setIsLoading(false);
     }

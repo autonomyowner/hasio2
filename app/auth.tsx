@@ -9,14 +9,15 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, Redirect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { useMutation, useConvexAuth } from "convex/react";
+import { authClient } from "@/lib/authClient";
+import { api } from "@/convex/_generated/api";
 import { useLanguage } from "@/hooks/useLanguage";
 import { Button } from "@/components/ui";
-import { signInWithEmail, signUpWithEmail } from "@/lib/auth";
 import { useAppStore } from "@/stores/appStore";
 import { UserType } from "@/types";
 
@@ -35,6 +36,13 @@ export default function AuthScreen() {
   const { t, isRTL } = useLanguage();
   const setOnboardingComplete = useAppStore((state) => state.setOnboardingComplete);
 
+  // Check if already signed in
+  const { data: session, isPending: isSessionLoading } = authClient.useSession();
+  const { isAuthenticated: isConvexAuthenticated } = useConvexAuth();
+
+  // Convex mutation to sync user after auth
+  const syncUser = useMutation(api.users.syncUser);
+
   const [mode, setMode] = useState<AuthMode>("login");
   const [signupStep, setSignupStep] = useState<SignupStep>("credentials");
   const [email, setEmail] = useState("");
@@ -43,6 +51,11 @@ export default function AuthScreen() {
   const [userType, setUserType] = useState<UserType>("user");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Redirect if already signed in (must be after all hooks)
+  if (!isSessionLoading && session) {
+    return <Redirect href="/(tabs)" />;
+  }
 
   const handleCredentialsNext = () => {
     setError(null);
@@ -88,33 +101,47 @@ export default function AuthScreen() {
 
     try {
       if (mode === "login") {
-        const { user, error: authError } = await signInWithEmail(email.trim(), password);
-        if (authError) {
-          setError(authError);
-          return;
-        }
-        if (user) {
+        // Sign in with better-auth
+        const result = await authClient.signIn.email({
+          email: email.trim(),
+          password: password,
+        });
+
+        if (result.error) {
+          setError(result.error.message || t("error"));
+        } else {
           setOnboardingComplete(true);
           router.replace("/(tabs)");
         }
       } else {
-        const { user, error: authError } = await signUpWithEmail(
-          email.trim(),
-          password,
-          fullName.trim() || undefined,
-          userType
-        );
-        if (authError) {
-          setError(authError);
-          return;
-        }
-        if (user) {
+        // Sign up with better-auth
+        const result = await authClient.signUp.email({
+          email: email.trim(),
+          password: password,
+          name: fullName.trim() || undefined,
+        });
+
+        if (result.error) {
+          setError(result.error.message || t("error"));
+        } else {
+          // Sync user to Convex with their user type
+          // Small delay to allow auth token to propagate
+          setTimeout(async () => {
+            try {
+              await syncUser({ userType });
+            } catch (syncError) {
+              console.log("User sync will happen on next app load");
+            }
+          }, 1000);
+
           setOnboardingComplete(true);
           router.replace("/(tabs)");
         }
       }
     } catch (err: any) {
-      setError(err.message || t("error"));
+      console.error("Auth error:", err);
+      const errorMessage = err.message || t("error");
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

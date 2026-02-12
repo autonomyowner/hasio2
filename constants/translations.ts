@@ -186,6 +186,31 @@ export const translations = {
     userTypeBusinessDesc: "Post lodging, restaurants, events & destinations",
     userTypeProvider: "Service Provider",
     userTypeProviderDesc: "Offer services like tour guide, photography, etc.",
+    admin: "Admin",
+    adminDesc: "Manage app content and users",
+
+    // Admin Dashboard
+    adminDashboard: "Admin Dashboard",
+    manageContent: "Manage content and users",
+    pendingContent: "Pending Content",
+    aiReports: "AI Reports",
+    overview: "Overview",
+    pending: "Pending",
+    reports: "Reports",
+    approve: "Approve",
+    reject: "Reject",
+    markAsReviewed: "Mark as Reviewed",
+    noPendingContent: "No pending content",
+    noUnreviewedReports: "No unreviewed reports",
+    contentApproved: "Content approved",
+    contentRejected: "Content rejected",
+    rejectContent: "Reject Content",
+    confirmReject: "Are you sure you want to reject this content?",
+    users: "Users",
+    totalUsers: "Total Users",
+    businessOwners: "Business Owners",
+    serviceProviders: "Service Providers",
+    admins: "Admins",
 
     // Business Dashboard
     businessDashboard: "Business Dashboard",
@@ -204,6 +229,22 @@ export const translations = {
     myServices: "My Services",
     activeServices: "Active Services",
     manageServices: "Manage your service offerings",
+    totalServices: "Total Services",
+    addService: "Add Service",
+    noServicesYet: "No services yet",
+    startAddingServices: "Start offering your services to travelers",
+    addFirstService: "Add Your First Service",
+
+    // Business Listings View
+    addNew: "Add New",
+    noListingsYet: "No listings yet",
+    startAddingListings: "Start adding your lodgings, restaurants, and events",
+    goToDashboard: "Go to Dashboard",
+    listingApproved: "Approved",
+    listingPending: "Pending",
+    listingRejected: "Rejected",
+    destination: "Destination",
+    event: "Event",
 
     // Listing Status
     statusPending: "Pending",
@@ -269,6 +310,24 @@ export const translations = {
     becomeBusinessOrProvider: "Become a business or provider",
     upgradeSuccess: "Account upgraded successfully",
     upgradeError: "Failed to upgrade account",
+
+    // Privacy & Account Deletion
+    privacyPolicy: "Privacy Policy",
+    privacyPolicySubtitle: "View our privacy policy",
+    deleteAccount: "Delete Account",
+    deleteAccountSubtitle: "Permanently delete your account and data",
+    deleteAccountConfirmTitle: "Delete Account?",
+    deleteAccountConfirmMessage: "This action cannot be undone. All your data, moments, and plans will be permanently deleted.",
+    deleteAccountSuccess: "Account deleted successfully",
+    deleteAccountError: "Failed to delete account",
+    deleting: "Deleting...",
+
+    // Voice Data Consent
+    voiceDataConsentTitle: "Voice Assistant Data Notice",
+    voiceDataConsentMessage: "Your voice recordings are processed by third-party services (Groq for transcription, ElevenLabs for speech) to provide the voice assistant feature. By continuing, you agree to this data processing.",
+    voiceDataConsentLearnMore: "Learn more in our Privacy Policy",
+    voiceDataConsentAccept: "I Understand & Accept",
+    voiceDataConsentDecline: "Cancel",
   },
 
   ar: {
@@ -458,6 +517,31 @@ export const translations = {
     userTypeBusinessDesc: "انشر أماكن الإقامة والمطاعم والفعاليات والوجهات",
     userTypeProvider: "مقدم خدمات",
     userTypeProviderDesc: "قدم خدمات مثل مرشد سياحي، تصوير، وغيرها",
+    admin: "مدير",
+    adminDesc: "إدارة محتوى التطبيق والمستخدمين",
+
+    // Admin Dashboard
+    adminDashboard: "لوحة الإدارة",
+    manageContent: "إدارة المحتوى والمستخدمين",
+    pendingContent: "المحتوى المعلق",
+    aiReports: "بلاغات الذكاء الاصطناعي",
+    overview: "نظرة عامة",
+    pending: "معلق",
+    reports: "البلاغات",
+    approve: "موافقة",
+    reject: "رفض",
+    markAsReviewed: "وضع علامة كمراجع",
+    noPendingContent: "لا يوجد محتوى معلق",
+    noUnreviewedReports: "لا توجد بلاغات غير مراجعة",
+    contentApproved: "تمت الموافقة على المحتوى",
+    contentRejected: "تم رفض المحتوى",
+    rejectContent: "رفض المحتوى",
+    confirmReject: "هل أنت متأكد من رفض هذا المحتوى؟",
+    users: "المستخدمون",
+    totalUsers: "إجمالي المستخدمين",
+    businessOwners: "أصحاب الأعمال",
+    serviceProviders: "مقدمو الخدمات",
+    admins: "المديرون",
 
     // Business Dashboard
     businessDashboard: "لوحة تحكم الأعمال",
@@ -476,6 +560,22 @@ export const translations = {
     myServices: "خدماتي",
     activeServices: "الخدمات النشطة",
     manageServices: "إدارة عروض خدماتك",
+    totalServices: "إجمالي الخدمات",
+    addService: "إضافة خدمة",
+    noServicesYet: "لا توجد خدمات بعد",
+    startAddingServices: "ابدأ بتقديم خدماتك للمسافرين",
+    addFirstService: "أضف خدمتك الأولى",
+
+    // Business Listings View
+    addNew: "إضافة جديد",
+    noListingsYet: "لا توجد إعلانات بعد",
+    startAddingListings: "ابدأ بإضافة مساكنك ومطاعمك وفعالياتك",
+    goToDashboard: "الذهاب للوحة التحكم",
+    listingApproved: "موافق عليه",
+    listingPending: "قيد المراجعة",
+    listingRejected: "مرفوض",
+    destination: "وجهة",
+    event: "فعالية",
 
     // Listing Status
     statusPending: "قيد المراجعة",
@@ -541,6 +641,24 @@ export const translations = {
     becomeBusinessOrProvider: "كن صاحب عمل أو مقدم خدمات",
     upgradeSuccess: "تمت ترقية الحساب بنجاح",
     upgradeError: "فشل في ترقية الحساب",
+
+    // Privacy & Account Deletion
+    privacyPolicy: "سياسة الخصوصية",
+    privacyPolicySubtitle: "عرض سياسة الخصوصية",
+    deleteAccount: "حذف الحساب",
+    deleteAccountSubtitle: "حذف حسابك وبياناتك نهائياً",
+    deleteAccountConfirmTitle: "حذف الحساب؟",
+    deleteAccountConfirmMessage: "لا يمكن التراجع عن هذا الإجراء. سيتم حذف جميع بياناتك ولحظاتك وخططك نهائياً.",
+    deleteAccountSuccess: "تم حذف الحساب بنجاح",
+    deleteAccountError: "فشل في حذف الحساب",
+    deleting: "جاري الحذف...",
+
+    // Voice Data Consent
+    voiceDataConsentTitle: "إشعار بيانات المساعد الصوتي",
+    voiceDataConsentMessage: "تتم معالجة تسجيلاتك الصوتية بواسطة خدمات خارجية (Groq للنسخ، ElevenLabs للكلام) لتوفير ميزة المساعد الصوتي. بالمتابعة، أنت توافق على معالجة البيانات هذه.",
+    voiceDataConsentLearnMore: "اعرف المزيد في سياسة الخصوصية",
+    voiceDataConsentAccept: "أفهم وأوافق",
+    voiceDataConsentDecline: "إلغاء",
   },
 } as const;
 

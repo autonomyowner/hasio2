@@ -1,7 +1,6 @@
 import React, { useRef, useCallback } from "react";
-import { View, Pressable, StyleSheet, Dimensions } from "react-native";
+import { View, Pressable, StyleSheet, Dimensions, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import PagerView from "react-native-pager-view";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -9,6 +8,7 @@ import Animated, {
   interpolateColor,
 } from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
+import PagerView from "@/components/PagerViewWrapper";
 
 // Import screen content components
 import {
@@ -46,30 +46,43 @@ const elevationOffsets = [0, -4, -8, -14, -8, -4, 0];
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  const pagerRef = useRef<PagerView>(null);
+  const pagerRef = useRef<any>(null);
   const [currentPage, setCurrentPage] = React.useState(3); // Start at home (center)
   const scrollPosition = useSharedValue(3);
+  const isWeb = Platform.OS === "web";
 
   const handlePageScroll = useCallback((e: any) => {
+    if (isWeb) return;
     const { position, offset } = e.nativeEvent;
     scrollPosition.value = position + offset;
-  }, []);
+  }, [isWeb]);
 
   const handlePageSelected = useCallback((e: any) => {
+    if (isWeb) return;
     const position = e.nativeEvent.position;
     setCurrentPage(position);
-  }, []);
+  }, [isWeb]);
 
   const handleTabPress = useCallback((index: number) => {
-    pagerRef.current?.setPage(index);
-  }, []);
+    if (isWeb) {
+      setCurrentPage(index);
+      scrollPosition.value = index;
+    } else {
+      pagerRef.current?.setPage(index);
+    }
+  }, [isWeb]);
 
   const handleNavigateToTab = useCallback((tabKey: string) => {
     const index = tabs.findIndex(tab => tab.key === tabKey);
     if (index !== -1) {
-      pagerRef.current?.setPage(index);
+      if (isWeb) {
+        setCurrentPage(index);
+        scrollPosition.value = index;
+      } else {
+        pagerRef.current?.setPage(index);
+      }
     }
-  }, []);
+  }, [isWeb]);
 
   // Map old tab indices to new for navigation
   const handleNavigateToTabIndex = useCallback((oldIndex: number) => {
@@ -85,8 +98,13 @@ export default function TabLayout() {
       6: 6, // settings -> index 6
     };
     const newIndex = indexMap[oldIndex] ?? oldIndex;
-    pagerRef.current?.setPage(newIndex);
-  }, []);
+    if (isWeb) {
+      setCurrentPage(newIndex);
+      scrollPosition.value = newIndex;
+    } else {
+      pagerRef.current?.setPage(newIndex);
+    }
+  }, [isWeb]);
 
   const renderScreen = (key: string) => {
     switch (key) {
@@ -113,22 +131,32 @@ export default function TabLayout() {
 
   return (
     <View style={styles.container}>
-      {/* Pager View for native swipeable content */}
-      <PagerView
-        ref={pagerRef}
-        style={styles.pagerView}
-        initialPage={3}
-        onPageScroll={handlePageScroll}
-        onPageSelected={handlePageSelected}
-        overdrag={true}
-        overScrollMode="always"
-      >
-        {tabs.map((tab) => (
-          <View key={tab.key} style={styles.page}>
-            {renderScreen(tab.key)}
-          </View>
-        ))}
-      </PagerView>
+      {/* Content area - PagerView on native, simple View on web */}
+      {isWeb ? (
+        <View style={styles.pagerView}>
+          {renderScreen(tabs[currentPage].key)}
+        </View>
+      ) : PagerView ? (
+        <PagerView
+          ref={pagerRef}
+          style={styles.pagerView}
+          initialPage={3}
+          onPageScroll={handlePageScroll}
+          onPageSelected={handlePageSelected}
+          overdrag={true}
+          overScrollMode="always"
+        >
+          {tabs.map((tab) => (
+            <View key={tab.key} style={styles.page}>
+              {renderScreen(tab.key)}
+            </View>
+          ))}
+        </PagerView>
+      ) : (
+        <View style={styles.pagerView}>
+          {renderScreen(tabs[currentPage].key)}
+        </View>
+      )}
 
       {/* Hierarchical Arch Tab Bar */}
       <View style={[styles.tabBarContainer, { paddingBottom: insets.bottom + 4 }]}>

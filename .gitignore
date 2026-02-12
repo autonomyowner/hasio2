@@ -9,7 +9,7 @@ dist/
 web-build/
 
 # Native (root folders only)
-/android/
+# /android/
 /ios/
 *.orig.*
 *.jks

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
@@ -16,11 +17,16 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withRepeat,
+  withSequence,
 } from "react-native-reanimated";
 import { useLanguage } from "@/hooks/useLanguage";
 import { useAppStore } from "@/stores/appStore";
 import { ChatBubble, VoiceAssistant } from "@/components/planner";
+import { voiceService } from "@/lib/voiceService";
 import type { ChatMessage } from "@/types";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -37,9 +43,38 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
   const addChatMessage = useAppStore((state) => state.addChatMessage);
 
   const [inputText, setInputText] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSend = () => {
-    if (!inputText.trim()) return;
+  const reportMessage = useMutation(api.reportedMessages.reportMessage);
+
+  // Initialize text mode on mount
+  useEffect(() => {
+    voiceService.initializeTextMode();
+  }, []);
+
+  // Handle reporting AI messages
+  const handleReportMessage = async (messageId: string) => {
+    try {
+      // Find the message in chat history
+      const message = chatMessages.find((msg) => msg.id === messageId);
+      if (!message || message.isUser) {
+        return; // Only report AI messages
+      }
+
+      await reportMessage({
+        messageId: message.id,
+        messageText: message.text,
+        reportReason: "User reported inappropriate content",
+      });
+
+      console.log("Message reported successfully:", messageId);
+    } catch (error) {
+      console.error("Error reporting message:", error);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!inputText.trim() || isLoading) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -48,21 +83,43 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
       timestamp: new Date().toISOString(),
     };
     addChatMessage(userMessage);
+    const userText = inputText.trim();
     setInputText("");
+    setIsLoading(true);
 
+    // Scroll to bottom to show user message
     setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+
+    try {
+      // Get AI response
+      const aiResponse = await voiceService.getTextChatResponse(userText);
+
       const botMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        text: "Thank you for your message! I'm here to help you plan your perfect day in Al-Ahsa. What would you like to know more about?",
+        text: aiResponse,
         isUser: false,
         timestamp: new Date().toISOString(),
       };
       addChatMessage(botMessage);
-    }, 1000);
 
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+      // Scroll to show bot response
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        text: "I apologize, but I'm having trouble responding right now. Please try again.",
+        isUser: false,
+        timestamp: new Date().toISOString(),
+      };
+      addChatMessage(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const suggestionButtons = [
@@ -72,10 +129,11 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
     { key: "itinerary", label: t("suggestItinerary"), tabIndex: null },
   ];
 
-  const handleSuggestion = (tabIndex: number | null, label: string) => {
+  const handleSuggestion = async (tabIndex: number | null, label: string) => {
     if (tabIndex !== null) {
       onNavigateToTab?.(tabIndex);
     } else {
+      // Send as a message to AI
       const userMessage: ChatMessage = {
         id: Date.now().toString(),
         text: label,
@@ -83,16 +141,31 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
         timestamp: new Date().toISOString(),
       };
       addChatMessage(userMessage);
+      setIsLoading(true);
 
       setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      try {
+        const aiResponse = await voiceService.getTextChatResponse(label);
+
         const botMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
-          text: "I'd love to help you plan a full day itinerary! For a perfect day in Al-Ahsa, I recommend starting with breakfast at a traditional coffee house, then visiting the famous Jabal Al-Qara caves in the morning. Enjoy lunch at a local restaurant, and spend the afternoon exploring the date palm groves. End your day at the historic Al-Hofuf souq!",
+          text: aiResponse,
           isUser: false,
           timestamp: new Date().toISOString(),
         };
         addChatMessage(botMessage);
-      }, 1500);
+
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      } catch (error) {
+        console.error('Error getting AI response:', error);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -118,6 +191,11 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
     tapToStop: t("tapToStop"),
     voiceAssistant: t("voiceAssistant"),
     close: t("close"),
+    voiceDataConsentTitle: t("voiceDataConsentTitle"),
+    voiceDataConsentMessage: t("voiceDataConsentMessage"),
+    voiceDataConsentLearnMore: t("voiceDataConsentLearnMore"),
+    voiceDataConsentAccept: t("voiceDataConsentAccept"),
+    voiceDataConsentDecline: t("voiceDataConsentDecline"),
   };
 
   return (
@@ -132,9 +210,14 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
           entering={FadeInDown.delay(100).duration(600)}
           style={[styles.header, isRTL && styles.headerRTL]}
         >
-          <Text style={[styles.title, isRTL && styles.textRTL]}>
-            {t("plannerAssistant")}
-          </Text>
+          <View>
+            <Text style={[styles.title, isRTL && styles.textRTL]}>
+              {t("plannerAssistant")}
+            </Text>
+            <Text style={[styles.subtitle, isRTL && styles.textRTL]}>
+              Powered by AI - Al-Ahsa Expert
+            </Text>
+          </View>
         </Animated.View>
 
         {/* Chat Area */}
@@ -150,6 +233,7 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
               style={styles.welcomeContainer}
             >
               <View style={[styles.welcomeBubble, isRTL && styles.welcomeBubbleRTL]}>
+                <Text style={[styles.welcomeEmoji]}>👋</Text>
                 <Text style={[styles.welcomeTitle, isRTL && styles.textRTL]}>
                   {t("plannerWelcome")}
                 </Text>
@@ -158,12 +242,16 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
                 </Text>
               </View>
 
+              <Text style={[styles.suggestionsTitle, isRTL && styles.textRTL]}>
+                Quick suggestions:
+              </Text>
               <View style={[styles.suggestions, isRTL && styles.suggestionsRTL]}>
-                {suggestionButtons.map((btn) => (
+                {suggestionButtons.map((btn, index) => (
                   <SuggestionButton
                     key={btn.key}
                     label={btn.label}
                     onPress={() => handleSuggestion(btn.tabIndex, btn.label)}
+                    delay={index * 100}
                   />
                 ))}
               </View>
@@ -175,9 +263,25 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
               key={message.id}
               entering={FadeInUp.delay(index * 50).duration(400)}
             >
-              <ChatBubble message={message} isRTL={isRTL} />
+              <ChatBubble
+                message={message}
+                isRTL={isRTL}
+                onReport={handleReportMessage}
+              />
             </Animated.View>
           ))}
+
+          {/* Loading indicator */}
+          {isLoading && (
+            <Animated.View
+              entering={FadeInUp.duration(300)}
+              style={[styles.loadingContainer, isRTL && styles.loadingContainerRTL]}
+            >
+              <View style={styles.loadingBubble}>
+                <TypingIndicator />
+              </View>
+            </Animated.View>
+          )}
         </ScrollView>
 
         {/* Input Area */}
@@ -188,16 +292,25 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
             placeholderTextColor="#A3A3A3"
             value={inputText}
             onChangeText={setInputText}
+            onSubmitEditing={handleSend}
             multiline
             maxLength={500}
             textAlign={isRTL ? "right" : "left"}
+            editable={!isLoading}
           />
           <Pressable
-            style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+            style={[
+              styles.sendButton,
+              (!inputText.trim() || isLoading) && styles.sendButtonDisabled
+            ]}
             onPress={handleSend}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || isLoading}
           >
-            <Text style={styles.sendButtonText}>{t("sendMessage")}</Text>
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.sendButtonText}>→</Text>
+            )}
           </Pressable>
         </View>
 
@@ -212,12 +325,71 @@ export function PlannerScreenContent({ onNavigateToTab }: PlannerScreenContentPr
   );
 }
 
+// Typing indicator component
+function TypingIndicator() {
+  const dot1 = useSharedValue(0);
+  const dot2 = useSharedValue(0);
+  const dot3 = useSharedValue(0);
+
+  useEffect(() => {
+    dot1.value = withRepeat(
+      withSequence(
+        withSpring(1, { damping: 10 }),
+        withSpring(0, { damping: 10 })
+      ),
+      -1,
+      false
+    );
+    setTimeout(() => {
+      dot2.value = withRepeat(
+        withSequence(
+          withSpring(1, { damping: 10 }),
+          withSpring(0, { damping: 10 })
+        ),
+        -1,
+        false
+      );
+    }, 200);
+    setTimeout(() => {
+      dot3.value = withRepeat(
+        withSequence(
+          withSpring(1, { damping: 10 }),
+          withSpring(0, { damping: 10 })
+        ),
+        -1,
+        false
+      );
+    }, 400);
+  }, []);
+
+  const dot1Style = useAnimatedStyle(() => ({
+    transform: [{ translateY: -dot1.value * 5 }],
+  }));
+
+  const dot2Style = useAnimatedStyle(() => ({
+    transform: [{ translateY: -dot2.value * 5 }],
+  }));
+
+  const dot3Style = useAnimatedStyle(() => ({
+    transform: [{ translateY: -dot3.value * 5 }],
+  }));
+
+  return (
+    <View style={styles.typingIndicator}>
+      <Animated.View style={[styles.typingDot, dot1Style]} />
+      <Animated.View style={[styles.typingDot, dot2Style]} />
+      <Animated.View style={[styles.typingDot, dot3Style]} />
+    </View>
+  );
+}
+
 interface SuggestionButtonProps {
   label: string;
   onPress: () => void;
+  delay?: number;
 }
 
-function SuggestionButton({ label, onPress }: SuggestionButtonProps) {
+function SuggestionButton({ label, onPress, delay = 0 }: SuggestionButtonProps) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -234,6 +406,7 @@ function SuggestionButton({ label, onPress }: SuggestionButtonProps) {
 
   return (
     <AnimatedPressable
+      entering={FadeInDown.delay(delay).duration(400)}
       style={[styles.suggestionButton, animatedStyle]}
       onPress={onPress}
       onPressIn={handlePressIn}
@@ -255,19 +428,26 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#E8E5E0",
-    backgroundColor: "#FAF7F2",
+    backgroundColor: "#FFFFFF",
   },
   headerRTL: {
     alignItems: "flex-end",
   },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "700",
     color: "#1A1A1A",
     letterSpacing: -0.5,
+    marginBottom: 2,
+  },
+  subtitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#0D7A5F",
+    letterSpacing: 0.2,
   },
   textRTL: {
     textAlign: "right",
@@ -276,7 +456,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   chatContent: {
-    padding: 24,
+    padding: 20,
     paddingBottom: 16,
   },
   welcomeContainer: {
@@ -284,28 +464,41 @@ const styles = StyleSheet.create({
   },
   welcomeBubble: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 20,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#E8E5E0",
   },
   welcomeBubbleRTL: {
     alignItems: "flex-end",
   },
+  welcomeEmoji: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
   welcomeTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
     color: "#0D7A5F",
     marginBottom: 8,
   },
   welcomeText: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#1A1A1A",
+    fontSize: 16,
+    lineHeight: 24,
+    color: "#4A4A4A",
+  },
+  suggestionsTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6B7280",
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   suggestions: {
     flexDirection: "row",
@@ -316,17 +509,51 @@ const styles = StyleSheet.create({
     flexDirection: "row-reverse",
   },
   suggestionButton: {
-    backgroundColor: "#F5F1EB",
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E8E5E0",
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: "#0D7A5F",
+    shadowColor: "#0D7A5F",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   suggestionText: {
     fontSize: 14,
-    fontWeight: "500",
-    color: "#1A1A1A",
+    fontWeight: "600",
+    color: "#0D7A5F",
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    marginVertical: 8,
+  },
+  loadingContainerRTL: {
+    flexDirection: "row-reverse",
+  },
+  loadingBubble: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  typingIndicator: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+  },
+  typingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#0D7A5F",
   },
   inputContainer: {
     flexDirection: "row",
@@ -337,32 +564,47 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#E8E5E0",
     gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 8,
   },
   input: {
     flex: 1,
     backgroundColor: "#F5F1EB",
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    fontSize: 15,
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    fontSize: 16,
     color: "#1A1A1A",
-    maxHeight: 100,
+    maxHeight: 120,
+    borderWidth: 1,
+    borderColor: "#E8E5E0",
   },
   inputRTL: {
     writingDirection: "rtl",
   },
   sendButton: {
     backgroundColor: "#0D7A5F",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#0D7A5F",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   sendButtonDisabled: {
-    backgroundColor: "#A3A3A3",
+    backgroundColor: "#D1D5DB",
+    shadowOpacity: 0.1,
   },
   sendButtonText: {
     color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 24,
+    fontWeight: "700",
   },
 });
